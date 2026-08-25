@@ -1,0 +1,80 @@
+{
+  "name": "loclm",
+  "version": "0.1.0",
+  "description": "Local-first AI desktop workspace for projects, chats and plugins.",
+  "main": "./out/main/index.js",
+  "author": "LocLM",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit",
+    "build": "pnpm typecheck && electron-vite build",
+    "dist": "pnpm build && electron-builder",
+    "dist:publish": "pnpm build && electron-builder --publish onTagOrDraft",
+    "test:smoke": "node scripts/electron-smoke.cjs"
+  },
+  "dependencies": {
+    "docx": "^9.7.1",
+    "electron-updater": "^6.8.9",
+    "lucide-react": "^0.544.0",
+    "mammoth": "^1.12.1",
+    "pdfjs-dist": "^6.2.108",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.0.4",
+    "electron": "^44.0.0",
+    "electron-builder": "^26.0.12",
+    "electron-vite": "^5.0.0",
+    "playwright-core": "^1.62.1",
+    "typescript": "^5.9.2",
+    "vite": "^7.3.6"
+  },
+  "optionalDependencies": {
+    "@napi-rs/canvas": "^1.0.8"
+  },
+  "build": {
+    "appId": "com.loclm.desktop",
+    "productName": "LocLM",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "mac": {
+      "target": ["dmg", "zip"],
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Utility"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    }
+  }
+}
