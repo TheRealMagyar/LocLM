@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Attachment, Chat, Project } from '@shared/types'
 import BrandLogo from './BrandLogo'
+import AssistantInsights from './AssistantInsights'
 import { getTranslator } from '../i18n'
 import type { AppLanguage } from '@shared/types'
 
@@ -77,6 +78,7 @@ export default function ChatView(props: ChatViewProps): React.JSX.Element {
                     : <div className="file-attachment" key={attachment.id}><FileText size={15} /><span>{attachment.name}</span></div>)}
                 </div>
               ) : null}
+              {message.role === 'assistant' ? <AssistantInsights language={props.language} message={message} /> : null}
               {message.content ? (
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}

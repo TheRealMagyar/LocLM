@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Check, Cpu, Download, FileText, Github, Globe2, Image, Mail, RefreshCw, ScanLine, Search, ShieldCheck, X } from 'lucide-react'
-import { getTranslator } from '../i18n'
+import { Check, ChevronDown, Cpu, Download, ExternalLink, FileText, Github, Globe2, Image, Mail, RefreshCw, ScanLine, Search, ShieldCheck, X } from 'lucide-react'
+import { getTranslator, type Translate } from '../i18n'
 import type {
   AppSettings,
+  GmailConfiguration,
   GmailConnectionStatus,
   GmailThreadSummary,
   ModelDescriptor,
@@ -34,7 +35,12 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
   const [gmailQuery, setGmailQuery] = useState('is:unread')
   const [gmailResults, setGmailResults] = useState<GmailThreadSummary[]>([])
   const [gmailBusy, setGmailBusy] = useState(false)
+  const [gmailConfiguration, setGmailConfiguration] = useState<GmailConfiguration>({ hasBuiltInClientId: false })
+  const [gmailConnectionMessage, setGmailConnectionMessage] = useState('')
+  const [gmailAdvancedOpen, setGmailAdvancedOpen] = useState(false)
   const [shortcutStatus, setShortcutStatus] = useState('')
+  const [webTestQuery, setWebTestQuery] = useState('LocLM local AI')
+  const [webTestState, setWebTestState] = useState<{ status: 'idle' | 'busy' | 'success' | 'error'; message: string }>({ status: 'idle', message: '' })
   const t = getTranslator(props.settings.language)
 
   useEffect(() => {
@@ -42,6 +48,10 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
       setTab(props.initialTab as SettingsTab)
     }
   }, [props.initialTab, props.open])
+
+  useEffect(() => {
+    if (props.open) void window.loclm.gmail.configuration().then(setGmailConfiguration)
+  }, [props.open])
 
   if (!props.open) return null
 
@@ -75,12 +85,19 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
   }
 
   const connectGmail = async (): Promise<void> => {
+    if (!gmailConfiguration.hasBuiltInClientId && !props.settings.gmail.clientId.trim()) {
+      setGmailAdvancedOpen(true)
+      setGmailConnectionMessage(t('gmailClientIdRequired'))
+      return
+    }
     setGmailBusy(true)
+    setGmailConnectionMessage(t('openingGoogleBrowser'))
     try {
       props.onGmailStatusChange(await window.loclm.gmail.connect(props.settings.gmail.clientId))
+      setGmailConnectionMessage(t('gmailConnectedSuccess'))
       if (!props.settings.plugins.gmail) togglePlugin('gmail')
     } catch (error) {
-      setModelStatus(errorMessage(error))
+      setGmailConnectionMessage(errorMessage(error))
     } finally {
       setGmailBusy(false)
     }
@@ -89,6 +106,7 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
   const disconnectGmail = async (): Promise<void> => {
     await window.loclm.gmail.disconnect()
     props.onGmailStatusChange({ connected: false })
+    setGmailConnectionMessage('')
   }
 
   const searchGmail = async (): Promise<void> => {
@@ -105,6 +123,20 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
   const applyShortcut = async (): Promise<void> => {
     const registered = await window.loclm.capture.setShortcut(props.settings.capture.shortcut, props.settings.capture.enabled)
     setShortcutStatus(registered ? t('shortcutRegistered') : t('shortcutInUse'))
+  }
+
+  const testWebSearch = async (): Promise<void> => {
+    if (!webTestQuery.trim()) return
+    setWebTestState({ status: 'busy', message: t('testingSearch') })
+    try {
+      await window.loclm.secrets.set(props.secrets)
+      const results = await window.loclm.web.search(webTestQuery, props.settings.web, props.settings.language)
+      setWebTestState(results.length
+        ? { status: 'success', message: t('webTestReady', { count: results.length }) }
+        : { status: 'error', message: t('webTestNoResults') })
+    } catch (error) {
+      setWebTestState({ status: 'error', message: errorMessage(error) })
+    }
   }
 
   return (
@@ -132,7 +164,7 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
                 <label className="field"><span>{t('provider')}</span><input value={props.settings.model.providerName} onChange={(event) => updateModel({ providerName: event.target.value })} /></label>
                 <label className="field"><span>{t('theme')}</span><select value={props.settings.theme} onChange={(event) => updateSettings('theme', event.target.value as AppSettings['theme'])}><option value="system">{t('systemTheme')}</option><option value="dark">{t('darkTheme')}</option><option value="light">{t('lightTheme')}</option></select></label>
               </div>
-              <label className="field"><span>{t('language')}</span><select value={props.settings.language} onChange={(event) => updateSettings('language', event.target.value as AppSettings['language'])}><option value="en">English</option><option value="hu">Magyar</option></select></label>
+              <label className="field"><span>{t('language')}</span><select aria-label={t('language')} value={props.settings.language} onChange={(event) => updateSettings('language', event.target.value as AppSettings['language'])}><option value="en">{t('english')}</option><option value="hu">{t('hungarian')}</option></select></label>
               <label className="field"><span>{t('endpoint')}</span><input value={props.settings.model.baseUrl} onChange={(event) => updateModel({ baseUrl: event.target.value })} placeholder="http://127.0.0.1:1234/v1" /></label>
               <label className="field"><span>{t('apiKey')} <small>{t('optional')}</small></span><input type="password" value={props.secrets.modelApiKey ?? ''} onChange={(event) => props.onSecretsChange({ ...props.secrets, modelApiKey: event.target.value })} onBlur={() => void window.loclm.secrets.set(props.secrets)} /></label>
               <div className="field-grid two-columns">
@@ -166,8 +198,21 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
                   <div className="integration-title"><Mail size={16} /><strong>{t('gmailConnection')}</strong><span className={props.gmailStatus.connected ? 'connected-badge' : 'muted-badge'}>{props.gmailStatus.connected ? props.gmailStatus.email ?? t('connected') : t('notConnected')}</span></div>
                   {!props.gmailStatus.connected ? (
                     <>
-                      <label className="field"><span>{t('googleClientId')}</span><input value={props.settings.gmail.clientId} onChange={(event) => updateSettings('gmail', { ...props.settings.gmail, clientId: event.target.value })} placeholder="…apps.googleusercontent.com" /></label>
-                      <button className="primary-button" type="button" disabled={gmailBusy || !props.settings.gmail.clientId} onClick={() => void connectGmail()}>{gmailBusy ? t('connectingGmail') : t('connectGmail')}</button>
+                      <p className="gmail-connect-description">{t('gmailConnectDescription')}</p>
+                      <button className="gmail-connect-button" type="button" disabled={gmailBusy} onClick={() => void connectGmail()}>
+                        <span className="google-mark">G</span>
+                        <span><strong>{gmailBusy ? t('connectingGmail') : t('connectGmail')}</strong><small>{t('opensDefaultBrowser')}</small></span>
+                        <ExternalLink size={15} />
+                      </button>
+                      {gmailConnectionMessage ? <div className={gmailConnectionMessage === t('gmailConnectedSuccess') ? 'success-text' : 'warning-text'} role="status">{gmailConnectionMessage}</div> : null}
+                      <button className="advanced-toggle" type="button" aria-expanded={gmailAdvancedOpen} onClick={() => setGmailAdvancedOpen((open) => !open)}>{t('advancedSetup')}<ChevronDown className={gmailAdvancedOpen ? 'expanded' : ''} size={14} /></button>
+                      {gmailAdvancedOpen ? (
+                        <div className="advanced-content">
+                          <label className="field"><span>{t('googleClientId')}</span><input value={props.settings.gmail.clientId} onChange={(event) => { updateSettings('gmail', { ...props.settings.gmail, clientId: event.target.value }); setGmailConnectionMessage('') }} placeholder="…apps.googleusercontent.com" /></label>
+                          <small>{t('gmailClientIdHelp')}</small>
+                        </div>
+                      ) : null}
+                      <div className="settings-note"><ShieldCheck size={15} /> {t('gmailPrivacyNote')}</div>
                     </>
                   ) : (
                     <>
@@ -182,10 +227,12 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
               {props.settings.plugins.web && (
                 <div className="integration-box">
                   <div className="integration-title"><Globe2 size={16} /><strong>{t('webSearchProvider')}</strong></div>
-                  <label className="field"><span>{t('provider')}</span><select value={props.settings.web.provider} onChange={(event) => updateWeb({ provider: event.target.value as AppSettings['web']['provider'] })}><option value="brave">Brave Search</option><option value="searxng">{t('customSearxng')}</option></select></label>
-                  {props.settings.web.provider === 'brave'
-                    ? <label className="field"><span>{t('braveApiKey')}</span><input type="password" value={props.secrets.braveApiKey ?? ''} onChange={(event) => props.onSecretsChange({ ...props.secrets, braveApiKey: event.target.value })} onBlur={() => void window.loclm.secrets.set(props.secrets)} /></label>
-                    : <label className="field"><span>SearXNG URL</span><input value={props.settings.web.searxngUrl} onChange={(event) => updateWeb({ searxngUrl: event.target.value })} /></label>}
+                  <label className="field"><span>{t('provider')}</span><select value={props.settings.web.provider} onChange={(event) => { updateWeb({ provider: event.target.value as AppSettings['web']['provider'] }); setWebTestState({ status: 'idle', message: '' }) }}><option value="browser">{t('builtInBrowser')}</option><option value="brave">Brave Search API</option><option value="searxng">{t('customSearxng')}</option></select></label>
+                  {props.settings.web.provider === 'brave' ? <label className="field"><span>{t('braveApiKey')}</span><input type="password" value={props.secrets.braveApiKey ?? ''} onChange={(event) => props.onSecretsChange({ ...props.secrets, braveApiKey: event.target.value })} onBlur={() => void window.loclm.secrets.set(props.secrets)} /></label> : null}
+                  {props.settings.web.provider === 'searxng' ? <label className="field"><span>SearXNG URL</span><input value={props.settings.web.searxngUrl} onChange={(event) => updateWeb({ searxngUrl: event.target.value })} /></label> : null}
+                  <div className="settings-note"><Globe2 size={15} /> {props.settings.web.provider === 'browser' ? t('browserSearchHint') : props.settings.web.provider === 'brave' ? t('braveSetupHint') : t('searxngSetupHint')}</div>
+                  <div className="gmail-search-row"><input aria-label={t('webTestQuery')} value={webTestQuery} onChange={(event) => setWebTestQuery(event.target.value)} placeholder={t('webTestQuery')} /><button className="secondary-button" type="button" disabled={webTestState.status === 'busy' || !webTestQuery.trim()} onClick={() => void testWebSearch()}><Search size={14} /> {webTestState.status === 'busy' ? t('testingSearch') : t('testSearch')}</button></div>
+                  {webTestState.message ? <div className={webTestState.status === 'success' ? 'success-text' : webTestState.status === 'error' ? 'warning-text' : 'muted-text'} role="status">{webTestState.message}</div> : null}
                 </div>
               )}
             </div>
@@ -231,6 +278,15 @@ function Switch({ checked, onChange, label }: { checked: boolean; onChange: (che
 
 function PluginRow({ icon, title, description, checked, onChange }: { icon: React.ReactNode; title: string; description: string; checked: boolean; onChange: () => void }): React.JSX.Element {
   return <div className="plugin-row"><div className="plugin-icon">{icon}</div><div><strong>{title}</strong><small>{description}</small></div><Switch checked={checked} onChange={onChange} label={`${title} plugin`} /></div>
+}
+
+function localizedUpdateMessage(state: UpdateState, t: Translate): string {
+  if (state.status === 'checking') return t('updateChecking')
+  if (state.status === 'available') return t('updateAvailable', { version: state.version ?? '' })
+  if (state.status === 'downloading') return t('updateDownloading')
+  if (state.status === 'downloaded') return t('updateDownloaded')
+  if (state.status === 'error') return t('updateError')
+  return state.version ? t('noUpdateAvailable') : t('updateNotChecked')
 }
 
 function errorMessage(error: unknown): string {

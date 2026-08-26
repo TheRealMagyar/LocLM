@@ -21,15 +21,20 @@ const GMAIL_SCOPES = [
 ]
 
 export class GmailService {
-  constructor(private readonly vault: CredentialVault) {}
+  constructor(private readonly vault: CredentialVault, private readonly builtInClientId = '') {}
+
+  configuration(): { hasBuiltInClientId: boolean } {
+    return { hasBuiltInClientId: Boolean(this.builtInClientId.trim()) }
+  }
 
   status(): GmailConnectionStatus {
     const tokens = this.vault.getGmailTokens<GmailTokens>()
     return { connected: Boolean(tokens?.refreshToken || tokens?.accessToken), email: tokens?.email }
   }
 
-  async connect(clientId: string): Promise<GmailConnectionStatus> {
-    if (!clientId.trim()) throw new Error('Add meg a Google OAuth kliensazonosítót.')
+  async connect(clientId = ''): Promise<GmailConnectionStatus> {
+    const resolvedClientId = clientId.trim() || this.builtInClientId.trim()
+    if (!resolvedClientId) throw new Error('Ehhez a LocLM buildhez nincs Google OAuth kliensazonosító beállítva. Nyisd le a haladó beállítást, és adj meg egy Desktop Client ID-t.')
     const verifier = base64Url(randomBytes(48))
     const challenge = base64Url(createHash('sha256').update(verifier).digest())
     const state = base64Url(randomBytes(24))
@@ -60,7 +65,7 @@ export class GmailService {
         const address = server.address() as AddressInfo
         const redirectUri = `http://127.0.0.1:${address.port}/oauth/callback`
         const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth')
-        authUrl.searchParams.set('client_id', clientId.trim())
+        authUrl.searchParams.set('client_id', resolvedClientId)
         authUrl.searchParams.set('redirect_uri', redirectUri)
         authUrl.searchParams.set('response_type', 'code')
         authUrl.searchParams.set('scope', GMAIL_SCOPES.join(' '))
@@ -82,7 +87,7 @@ export class GmailService {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        client_id: clientId.trim(),
+        client_id: resolvedClientId,
         code: authorizationCode.code,
         code_verifier: verifier,
         grant_type: 'authorization_code',
@@ -101,7 +106,7 @@ export class GmailService {
       refreshToken: tokenPayload.refresh_token,
       expiresAt: Date.now() + tokenPayload.expires_in * 1000,
       scope: tokenPayload.scope,
-      clientId: clientId.trim()
+      clientId: resolvedClientId
     }
     tokens.email = await this.fetchProfileEmail(tokens.accessToken)
     await this.vault.setGmailTokens(tokens)

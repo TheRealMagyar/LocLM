@@ -57,8 +57,13 @@ export class AiService {
 
       const contentType = response.headers.get('content-type') ?? ''
       if (!contentType.includes('text/event-stream')) {
-        const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> }
-        this.emit(target, { requestId: request.requestId, type: 'chunk', content: payload.choices?.[0]?.message?.content ?? '' })
+        const payload = await response.json() as { choices?: Array<{ message?: { content?: string; reasoning_content?: string; reasoning?: string } }> }
+        const message = payload.choices?.[0]?.message
+        const reasoning = message?.reasoning_content ?? message?.reasoning
+        if (reasoning) this.emit(target, { requestId: request.requestId, type: 'reasoning', content: reasoning })
+        const parser = new ThinkTagParser()
+        for (const part of parser.push(message?.content ?? '')) this.emit(target, { requestId: request.requestId, ...part })
+        for (const part of parser.flush()) this.emit(target, { requestId: request.requestId, ...part })
         this.emit(target, { requestId: request.requestId, type: 'done' })
         return
       }
@@ -66,6 +71,7 @@ export class AiService {
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
+      const thinkTagParser = new ThinkTagParser()
 
       while (true) {
         const { value, done } = await reader.read()
@@ -80,14 +86,19 @@ export class AiService {
           const data = trimmed.slice(5).trim()
           if (!data || data === '[DONE]') continue
           try {
-            const payload = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string } }> }
-            const content = payload.choices?.[0]?.delta?.content
-            if (content) this.emit(target, { requestId: request.requestId, type: 'chunk', content })
+            const payload = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string; reasoning_content?: string; reasoning?: string } }> }
+            const delta = payload.choices?.[0]?.delta
+            const reasoning = delta?.reasoning_content ?? delta?.reasoning
+            if (reasoning) this.emit(target, { requestId: request.requestId, type: 'reasoning', content: reasoning })
+            if (delta?.content) {
+              for (const part of thinkTagParser.push(delta.content)) this.emit(target, { requestId: request.requestId, ...part })
+            }
           } catch {
             // Ignore provider-specific keepalive chunks.
           }
         }
       }
+      for (const part of thinkTagParser.flush()) this.emit(target, { requestId: request.requestId, ...part })
       this.emit(target, { requestId: request.requestId, type: 'done' })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Ismeretlen modellhiba.'
@@ -122,6 +133,49 @@ export class AiService {
     }
     return converted
   }
+}
+
+class ThinkTagParser {
+  private buffer = ''
+  private inReasoning = false
+
+  push(chunk: string): Array<Pick<ChatStreamEvent, 'type' | 'content'>> {
+    this.buffer += chunk
+    const parts: Array<Pick<ChatStreamEvent, 'type' | 'content'>> = []
+
+    while (this.buffer) {
+      const tag = this.inReasoning ? '</think>' : '<think>'
+      const index = this.buffer.indexOf(tag)
+      if (index >= 0) {
+        if (index > 0) parts.push({ type: this.inReasoning ? 'reasoning' : 'chunk', content: this.buffer.slice(0, index) })
+        this.buffer = this.buffer.slice(index + tag.length)
+        this.inReasoning = !this.inReasoning
+        continue
+      }
+
+      const retainedLength = partialTagSuffixLength(this.buffer, tag)
+      const readyLength = this.buffer.length - retainedLength
+      if (readyLength > 0) parts.push({ type: this.inReasoning ? 'reasoning' : 'chunk', content: this.buffer.slice(0, readyLength) })
+      this.buffer = this.buffer.slice(readyLength)
+      break
+    }
+    return parts
+  }
+
+  flush(): Array<Pick<ChatStreamEvent, 'type' | 'content'>> {
+    if (!this.buffer) return []
+    const part: Pick<ChatStreamEvent, 'type' | 'content'> = { type: this.inReasoning ? 'reasoning' : 'chunk', content: this.buffer }
+    this.buffer = ''
+    return [part]
+  }
+}
+
+function partialTagSuffixLength(value: string, tag: string): number {
+  const maxLength = Math.min(value.length, tag.length - 1)
+  for (let length = maxLength; length > 0; length -= 1) {
+    if (tag.startsWith(value.slice(-length))) return length
+  }
+  return 0
 }
 
 async function contentForMessage(text: string, attachments?: Attachment[]): Promise<ApiContent> {

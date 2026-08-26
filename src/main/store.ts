@@ -21,7 +21,7 @@ function createDefaultState(): PersistedState {
         createdAt: timestamp,
         updatedAt: timestamp,
         defaultModelId: '',
-        systemPrompt: 'Segítőkész, pontos, helyi AI-asszisztens vagy. Jelezd világosan, ha egy művelet külső szolgáltatást használ.',
+        systemPrompt: 'You are a helpful, accurate local AI assistant. Clearly disclose when an action uses an external service.',
         enabledPlugins: ['vision', 'documents', 'web'],
         files: []
       }
@@ -30,7 +30,7 @@ function createDefaultState(): PersistedState {
       {
         id: chatId,
         projectId,
-        title: 'Új beszélgetés',
+        title: 'New conversation',
         createdAt: timestamp,
         updatedAt: timestamp,
         messages: []
@@ -61,7 +61,8 @@ function createDefaultState(): PersistedState {
         clientId: ''
       },
       web: {
-        provider: 'brave',
+        provider: 'browser',
+        browserEngine: 'automatic',
         searxngUrl: 'http://127.0.0.1:8080'
       },
       plugins: {
@@ -104,7 +105,14 @@ export class StateStore {
           })),
           settings: {
             ...parsed.settings,
-            language: parsed.settings.language === 'hu' ? 'hu' : 'en'
+            language: parsed.settings.language === 'hu' ? 'hu' : 'en',
+            web: {
+              ...parsed.settings.web,
+              provider: parsed.settings.web.browserEngine
+                ? parsed.settings.web.provider
+                : parsed.settings.web.provider === 'brave' ? 'browser' : parsed.settings.web.provider,
+              browserEngine: 'automatic'
+            }
           }
         }
         return

@@ -1,5 +1,6 @@
 import type {
   Attachment,
+  AppLanguage,
   CapturePayload,
   CaptureSelection,
   CaptureSource,
@@ -7,6 +8,7 @@ import type {
   ChatStreamEvent,
   FileReadResult,
   GmailConnectionStatus,
+  GmailConfiguration,
   GmailDraftInput,
   GmailThreadSummary,
   ModelDescriptor,
@@ -51,7 +53,8 @@ export interface LoclmApi {
   }
   gmail: {
     status: () => Promise<GmailConnectionStatus>
-    connect: (clientId: string) => Promise<GmailConnectionStatus>
+    configuration: () => Promise<GmailConfiguration>
+    connect: (clientId?: string) => Promise<GmailConnectionStatus>
     disconnect: () => Promise<void>
     search: (query: string) => Promise<GmailThreadSummary[]>
     getThreadText: (threadId: string) => Promise<string>
@@ -60,7 +63,7 @@ export interface LoclmApi {
     modifyThread: (threadId: string, addLabelIds: string[], removeLabelIds: string[]) => Promise<void>
   }
   web: {
-    search: (query: string, settings: WebSettings) => Promise<WebSearchResult[]>
+    search: (query: string, settings: WebSettings, language: AppLanguage) => Promise<WebSearchResult[]>
     openExternal: (url: string) => Promise<void>
   }
   updater: {

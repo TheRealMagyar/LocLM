@@ -1,6 +1,6 @@
 {
   "name": "loclm",
-  "version": "0.1.0",
+  "version": "0.1.6",
   "description": "Local-first AI desktop workspace for projects, chats and plugins.",
   "main": "./out/main/index.js",
   "author": "LocLM",
@@ -13,7 +13,8 @@
     "build": "pnpm typecheck && electron-vite build",
     "dist": "pnpm build && electron-builder",
     "dist:publish": "pnpm build && electron-builder --publish onTagOrDraft",
-    "test:smoke": "node scripts/electron-smoke.cjs"
+    "test:smoke": "node scripts/electron-smoke.cjs",
+    "test:web-live": "node scripts/web-search-live-smoke.cjs"
   },
   "dependencies": {
     "docx": "^9.7.1",

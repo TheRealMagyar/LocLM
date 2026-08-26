@@ -7,7 +7,12 @@ import ProjectFilesView from './components/ProjectFilesView'
 import SettingsPanel from './components/SettingsPanel'
 import Sidebar from './components/Sidebar'
 import TitleBar from './components/TitleBar'
+import { getTranslator } from './i18n'
 import type {
+  AiActivityStatus,
+  AiActivityStep,
+  AiActivityType,
+  AppLanguage,
   AppSettings,
   Attachment,
   Chat,
@@ -49,6 +54,8 @@ export default function App(): React.JSX.Element {
   const [renameProjectName, setRenameProjectName] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<Project>()
   const [toast, setToast] = useState('')
+  const language = state?.settings.language ?? 'en'
+  const t = getTranslator(language)
 
   const hydratedRef = useRef(false)
   const stateRef = useRef<PersistedState | undefined>(undefined)
@@ -76,6 +83,7 @@ export default function App(): React.JSX.Element {
     if (!state || !hydratedRef.current) return
     const timeout = window.setTimeout(() => void window.loclm.state.save(state), 350)
     document.documentElement.dataset.theme = state.settings.theme
+    document.documentElement.lang = state.settings.language
     return () => window.clearTimeout(timeout)
   }, [state])
 
@@ -86,10 +94,11 @@ export default function App(): React.JSX.Element {
   useEffect(() => {
     const unsubscribeChat = window.loclm.models.onEvent(handleStreamEvent)
     const unsubscribeCapture = window.loclm.capture.onCompleted((payload) => {
-      void window.loclm.files.saveDataUrl(payload.dataUrl, 'Képernyőkivágás.png').then((attachment) => {
-        const current = stateRef.current
+      const current = stateRef.current
+      const captureT = getTranslator(current?.settings.language ?? 'en')
+      void window.loclm.files.saveDataUrl(payload.dataUrl, captureT('screenshotName')).then((attachment) => {
         if (current?.settings.capture.autoAnalyze) {
-          void sendPromptRef.current('Elemezd a kijelölt képernyőrészletet. Írd le, mit látsz, és emeld ki a fontos részleteket.', [attachment])
+          void sendPromptRef.current(captureT('analyzeScreenshotPrompt'), [attachment])
         } else {
           setPendingAttachments((items) => [...items, attachment])
           setState((value) => value ? addProjectFiles(value, value.activeProjectId, [attachment]) : value)
@@ -115,8 +124,14 @@ export default function App(): React.JSX.Element {
     if (!request || request.requestId !== event.requestId) return
     setState((current) => current ? updateMessage(current, request.chatId, request.assistantMessageId, (message) => {
       if (event.type === 'chunk') return { ...message, content: message.content + (event.content ?? ''), status: 'streaming' }
-      if (event.type === 'error') return { ...message, content: event.error ?? 'A modell nem válaszolt.', status: 'error' }
-      return { ...message, status: 'complete' }
+      if (event.type === 'reasoning') return { ...message, reasoning: (message.reasoning ?? '') + (event.content ?? ''), status: 'streaming' }
+      if (event.type === 'error') return {
+        ...message,
+        content: event.error ?? getTranslator(stateRef.current?.settings.language ?? 'en')('modelDidNotRespond'),
+        status: 'error',
+        activity: finishActivity(message.activity, 'error')
+      }
+      return { ...message, status: 'complete', activity: finishActivity(message.activity, 'complete') }
     }) : current)
     if (event.type === 'done' || event.type === 'error') setActiveRequest(undefined)
   }
@@ -138,11 +153,11 @@ export default function App(): React.JSX.Element {
       createdAt: date,
       updatedAt: date,
       defaultModelId: state.settings.model.modelId,
-      systemPrompt: 'Segítőkész, pontos, helyi AI-asszisztens vagy.',
+      systemPrompt: defaultSystemPrompt(language),
       enabledPlugins: Object.entries(state.settings.plugins).filter(([, enabled]) => enabled).map(([plugin]) => plugin as Project['enabledPlugins'][number]),
       files: []
     }
-    const chat: Chat = { id: chatId, projectId, title: 'Új beszélgetés', createdAt: date, updatedAt: date, messages: [] }
+    const chat: Chat = { id: chatId, projectId, title: t('newConversation'), createdAt: date, updatedAt: date, messages: [] }
     setState({ ...state, projects: [...state.projects, project], chats: [...state.chats, chat], activeProjectId: projectId, activeChatId: chatId })
     setNewProjectName('')
     setNewProjectOpen(false)
@@ -153,7 +168,7 @@ export default function App(): React.JSX.Element {
     if (!state) return
     const id = crypto.randomUUID()
     const date = timestamp()
-    const chat: Chat = { id, projectId: state.activeProjectId, title: 'Új beszélgetés', createdAt: date, updatedAt: date, messages: [] }
+    const chat: Chat = { id, projectId: state.activeProjectId, title: t('newConversation'), createdAt: date, updatedAt: date, messages: [] }
     setState({ ...state, chats: [...state.chats, chat], activeChatId: id })
     setPendingAttachments([])
     setPrompt('')
@@ -169,12 +184,12 @@ export default function App(): React.JSX.Element {
     }
     const id = crypto.randomUUID()
     const date = timestamp()
-    const chat: Chat = { id, projectId, title: 'Új beszélgetés', createdAt: date, updatedAt: date, messages: [] }
+    const chat: Chat = { id, projectId, title: t('newConversation'), createdAt: date, updatedAt: date, messages: [] }
     setState({ ...state, chats: [...state.chats, chat], activeProjectId: projectId, activeChatId: id })
   }
 
   const deleteChat = (chatId: string): void => {
-    if (!state || !window.confirm('Törlöd ezt a beszélgetést?')) return
+    if (!state || !window.confirm(t('deleteConversationQuestion'))) return
     const remaining = state.chats.filter((chat) => chat.id !== chatId)
     const projectChats = remaining.filter((chat) => chat.projectId === state.activeProjectId)
     if (projectChats.length) {
@@ -182,7 +197,7 @@ export default function App(): React.JSX.Element {
     } else {
       const id = crypto.randomUUID()
       const date = timestamp()
-      const replacement: Chat = { id, projectId: state.activeProjectId, title: 'Új beszélgetés', createdAt: date, updatedAt: date, messages: [] }
+      const replacement: Chat = { id, projectId: state.activeProjectId, title: t('newConversation'), createdAt: date, updatedAt: date, messages: [] }
       setState({ ...state, chats: [...remaining, replacement], activeChatId: id })
     }
   }
@@ -201,7 +216,7 @@ export default function App(): React.JSX.Element {
     } : current)
     setRenameTarget(undefined)
     setRenameProjectName('')
-    setToast(`A projekt új neve: ${name}`)
+    setToast(t('projectRenamed', { name }))
   }
 
   const deleteProject = (): void => {
@@ -221,7 +236,7 @@ export default function App(): React.JSX.Element {
         setState({ ...state, projects: remainingProjects, chats: remainingChats, activeProjectId: nextProject.id, activeChatId: nextProjectChat.id })
       } else {
         const date = timestamp()
-        const chat: Chat = { id: crypto.randomUUID(), projectId: nextProject.id, title: 'Új beszélgetés', createdAt: date, updatedAt: date, messages: [] }
+        const chat: Chat = { id: crypto.randomUUID(), projectId: nextProject.id, title: t('newConversation'), createdAt: date, updatedAt: date, messages: [] }
         setState({ ...state, projects: remainingProjects, chats: [...remainingChats, chat], activeProjectId: nextProject.id, activeChatId: chat.id })
       }
     } else {
@@ -234,17 +249,17 @@ export default function App(): React.JSX.Element {
         createdAt: date,
         updatedAt: date,
         defaultModelId: state.settings.model.modelId,
-        systemPrompt: 'Segítőkész, pontos, helyi AI-asszisztens vagy.',
+        systemPrompt: defaultSystemPrompt(language),
         enabledPlugins: Object.entries(state.settings.plugins).filter(([, enabled]) => enabled).map(([plugin]) => plugin as Project['enabledPlugins'][number]),
         files: []
       }
-      const replacementChat: Chat = { id: chatId, projectId, title: 'Új beszélgetés', createdAt: date, updatedAt: date, messages: [] }
+      const replacementChat: Chat = { id: chatId, projectId, title: t('newConversation'), createdAt: date, updatedAt: date, messages: [] }
       setState({ ...state, projects: [replacementProject], chats: [replacementChat], activeProjectId: projectId, activeChatId: chatId })
     }
     setPendingAttachments([])
     setPrompt('')
     setDeleteTarget(undefined)
-    setToast(`„${target.name}” projekt törölve`)
+    setToast(t('projectDeleted', { name: target.name }))
   }
 
   const sendPrompt = async (text: string, attachments = pendingAttachments): Promise<void> => {
@@ -258,7 +273,7 @@ export default function App(): React.JSX.Element {
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'user',
-      content: text.trim() || 'Elemezd a csatolt fájlt.',
+      content: text.trim() || t('analyzeAttachedFile'),
       createdAt: date,
       status: 'complete',
       attachments
@@ -268,9 +283,10 @@ export default function App(): React.JSX.Element {
       role: 'assistant',
       content: '',
       createdAt: date,
-      status: 'streaming'
+      status: 'streaming',
+      activity: createActivity(webEnabled, gmailEnabled)
     }
-    const title = chat.messages.length === 0 ? createTitle(userMessage.content) : chat.title
+    const title = chat.messages.length === 0 ? createTitle(userMessage.content, t('newConversation')) : chat.title
     const nextMessages = [...chat.messages, userMessage]
     const nextState = addProjectFiles(
       updateChat(current, chat.id, (item) => ({ ...item, title, updatedAt: date, messages: [...nextMessages, assistantMessage] })),
@@ -287,7 +303,9 @@ export default function App(): React.JSX.Element {
     setActiveRequest(request)
 
     try {
-      const pluginContext = await buildPluginContext(userMessage.content, webEnabled, gmailEnabled, current)
+      const pluginContext = await buildPluginContext(userMessage.content, webEnabled, gmailEnabled, current, language, (type, status, detail, sources) => {
+        setState((latest) => latest ? updateMessage(latest, chat.id, assistantMessage.id, (message) => advanceActivity(message, type, status, detail, sources)) : latest)
+      })
       window.loclm.models.startChat({
         requestId: request.requestId,
         chatId: chat.id,
@@ -308,7 +326,7 @@ export default function App(): React.JSX.Element {
       if (!attachments.length) return
       setState((current) => current ? addProjectFiles(current, current.activeProjectId, attachments) : current)
       if (addToComposer) setPendingAttachments((items) => deduplicateFiles([...items, ...attachments]))
-      setToast(`${attachments.length} fájl hozzáadva a projekthez`)
+      setToast(t('addFilesResult', { count: attachments.length }))
     } catch (error) {
       setToast(errorMessage(error))
     }
@@ -339,23 +357,47 @@ export default function App(): React.JSX.Element {
         ? { ...project, files: project.files.filter((file) => file.id !== attachment.id), updatedAt: timestamp() }
         : project)
     } : current)
-    setToast(`„${attachment.name}” eltávolítva a projektből`)
+    setToast(t('projectFileRemoved', { name: attachment.name }))
+  }
+
+  const toggleWebSearch = (): void => {
+    if (!state?.settings.plugins.web) {
+      openSettings('plugins')
+      return
+    }
+    const configured = state.settings.web.provider === 'browser'
+      || (state.settings.web.provider === 'searxng'
+        ? Boolean(state.settings.web.searxngUrl.trim())
+        : Boolean(secrets.braveApiKey?.trim()))
+    if (!configured) {
+      setWebEnabled(false)
+      setToast(t('webNeedsSetup'))
+      openSettings('plugins')
+      return
+    }
+    setWebEnabled((value) => !value)
   }
 
   const abort = (): void => {
     if (!activeRequest) return
     window.loclm.models.abortChat(activeRequest.requestId)
     activeRequestRef.current = undefined
-    setState((current) => current ? updateMessage(current, activeRequest.chatId, activeRequest.assistantMessageId, (message) => ({ ...message, status: 'complete' })) : current)
+    setState((current) => current ? updateMessage(current, activeRequest.chatId, activeRequest.assistantMessageId, (message) => ({ ...message, status: 'complete', activity: finishActivity(message.activity, 'complete') })) : current)
     setActiveRequest(undefined)
   }
 
   const updateSettings = (settings: AppSettings): void => {
     setState((current) => {
       if (!current) return current
-      const projects = current.projects.map((project) => project.id === current.activeProjectId
-        ? { ...project, defaultModelId: settings.model.modelId, updatedAt: timestamp() }
-        : project)
+      const languageChanged = current.settings.language !== settings.language
+      const projects = current.projects.map((project) => {
+        const systemPrompt = languageChanged && STANDARD_SYSTEM_PROMPTS.has(project.systemPrompt)
+          ? defaultSystemPrompt(settings.language)
+          : project.systemPrompt
+        return project.id === current.activeProjectId
+          ? { ...project, systemPrompt, defaultModelId: settings.model.modelId, updatedAt: timestamp() }
+          : { ...project, systemPrompt }
+      })
       return { ...current, settings, projects }
     })
   }
@@ -363,20 +405,20 @@ export default function App(): React.JSX.Element {
   const exportMessage = async (title: string, content: string, format: 'docx' | 'pdf'): Promise<void> => {
     try {
       const path = await window.loclm.files.exportText(title, content, format)
-      if (path) setToast(`Exportálva: ${path}`)
+      if (path) setToast(t('exported', { path }))
     } catch (error) {
       setToast(errorMessage(error))
     }
   }
 
-  if (!state) return <div className="loading-screen"><BrandLogo size="large" /><span>LocLM betöltése…</span></div>
+  if (!state) return <div className="loading-screen"><BrandLogo size="large" /><span>{getTranslator('en')('loading')}</span></div>
 
   const activeProject = state.projects.find((project) => project.id === state.activeProjectId)
   const activeChat = state.chats.find((chat) => chat.id === state.activeChatId)
 
   return (
     <div className="app-shell">
-      <TitleBar projectName={activeProject?.name} />
+      <TitleBar projectName={activeProject?.name} language={language} />
       <Sidebar
         projects={state.projects}
         chats={state.chats}
@@ -384,6 +426,7 @@ export default function App(): React.JSX.Element {
         activeChatId={state.activeChatId}
         modelLabel={state.settings.model.modelId}
         activeView={activeView}
+        language={language}
         onSelectProject={selectProject}
         onSelectChat={(activeChatId) => { setState({ ...state, activeChatId }); setActiveView('chat') }}
         onNewProject={() => setNewProjectOpen(true)}
@@ -405,11 +448,12 @@ export default function App(): React.JSX.Element {
           webEnabled={webEnabled}
           gmailEnabled={gmailEnabled}
           generating={Boolean(activeRequest)}
+          language={language}
           onPromptChange={setPrompt}
           onSend={() => void sendPrompt(prompt)}
           onAttach={() => void attachFiles()}
           onCapture={() => void window.loclm.capture.open()}
-          onToggleWeb={() => state.settings.plugins.web ? setWebEnabled((value) => !value) : openSettings('plugins')}
+          onToggleWeb={toggleWebSearch}
           onToggleGmail={() => state.settings.plugins.gmail && gmailStatus.connected ? setGmailEnabled((value) => !value) : openSettings('plugins')}
           onRemoveAttachment={(id) => setPendingAttachments((items) => items.filter((item) => item.id !== id))}
           onAbort={abort}
@@ -419,6 +463,7 @@ export default function App(): React.JSX.Element {
       ) : (
         <ProjectFilesView
           project={activeProject}
+          language={language}
           onAddFiles={() => void attachFiles(false)}
           onOpenFile={(attachment) => void openProjectFile(attachment)}
           onRevealFile={(attachment) => void revealProjectFile(attachment)}
@@ -439,21 +484,21 @@ export default function App(): React.JSX.Element {
         onGmailStatusChange={setGmailStatus}
       />
       {newProjectOpen && (
-        <Modal title="Új projekt" description="A projekt saját chateket, fájlokat és AI-beállításokat kap." onClose={() => setNewProjectOpen(false)}>
-          <label className="field"><span>Projekt neve</span><input autoFocus value={newProjectName} onChange={(event) => setNewProjectName(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && createProject()} placeholder="Például: Kutatás" /></label>
-          <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setNewProjectOpen(false)}>Mégse</button><button className="primary-button" type="button" disabled={!newProjectName.trim()} onClick={createProject}><FolderPlus size={15} /> Projekt létrehozása</button></div>
+        <Modal title={t('newProject')} description={t('projectDescription')} closeLabel={t('close')} onClose={() => setNewProjectOpen(false)}>
+          <label className="field"><span>{t('projectName')}</span><input autoFocus value={newProjectName} onChange={(event) => setNewProjectName(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && createProject()} placeholder={t('projectExample')} /></label>
+          <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setNewProjectOpen(false)}>{t('cancel')}</button><button className="primary-button" type="button" disabled={!newProjectName.trim()} onClick={createProject}><FolderPlus size={15} /> {t('createProject')}</button></div>
         </Modal>
       )}
       {renameTarget && (
-        <Modal title="Projekt átnevezése" description="A chatek és a projektfájlok változatlanul megmaradnak." onClose={() => setRenameTarget(undefined)}>
-          <label className="field"><span>Új név</span><input autoFocus value={renameProjectName} onChange={(event) => setRenameProjectName(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && renameProject()} /></label>
-          <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setRenameTarget(undefined)}>Mégse</button><button className="primary-button" type="button" disabled={!renameProjectName.trim()} onClick={renameProject}><Pencil size={15} /> Átnevezés</button></div>
+        <Modal title={t('renameProject')} description={t('renameProjectDescription')} closeLabel={t('close')} onClose={() => setRenameTarget(undefined)}>
+          <label className="field"><span>{t('newName')}</span><input autoFocus value={renameProjectName} onChange={(event) => setRenameProjectName(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && renameProject()} /></label>
+          <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setRenameTarget(undefined)}>{t('cancel')}</button><button className="primary-button" type="button" disabled={!renameProjectName.trim()} onClick={renameProject}><Pencil size={15} /> {t('rename')}</button></div>
         </Modal>
       )}
       {deleteTarget && (
-        <Modal title="Projekt törlése?" description={`A(z) „${deleteTarget.name}” projekt és minden chatje eltűnik a LocLM-ből. A lemezen tárolt csatolmányokat ez nem törli.`} onClose={() => setDeleteTarget(undefined)}>
-          <div className="modal-warning"><Trash2 size={17} /><span>Ez a művelet az alkalmazáson belül nem vonható vissza.</span></div>
-          <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setDeleteTarget(undefined)}>Mégse</button><button className="danger-button" type="button" onClick={deleteProject}><Trash2 size={15} /> Projekt törlése</button></div>
+        <Modal title={t('deleteProjectQuestion')} description={t('deleteProjectDescription', { name: deleteTarget.name })} closeLabel={t('close')} onClose={() => setDeleteTarget(undefined)}>
+          <div className="modal-warning"><Trash2 size={17} /><span>{t('deleteProjectWarning')}</span></div>
+          <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setDeleteTarget(undefined)}>{t('cancel')}</button><button className="danger-button" type="button" onClick={deleteProject}><Trash2 size={15} /> {t('deleteProject')}</button></div>
         </Modal>
       )}
       {toast && <div className="toast" role="status">{toast}</div>}
@@ -487,28 +532,70 @@ function deduplicateFiles(files: Attachment[]): Attachment[] {
   return [...new Map(files.map((file) => [file.id, file])).values()]
 }
 
-function createTitle(content: string): string {
+function createTitle(content: string, fallback: string): string {
   const clean = content.replace(/\s+/g, ' ').trim()
-  return clean.length > 48 ? `${clean.slice(0, 48)}…` : clean || 'Új beszélgetés'
+  return clean.length > 48 ? `${clean.slice(0, 48)}…` : clean || fallback
 }
 
-async function buildPluginContext(query: string, useWeb: boolean, useGmail: boolean, state: PersistedState): Promise<string> {
+type PluginProgress = (type: Extract<AiActivityType, 'web-search' | 'gmail-search'>, status: Extract<AiActivityStatus, 'active' | 'complete'>, detail?: string, sources?: WebSearchResult[]) => void
+
+async function buildPluginContext(query: string, useWeb: boolean, useGmail: boolean, state: PersistedState, language: AppLanguage, onProgress: PluginProgress): Promise<string> {
+  const t = getTranslator(language)
   const sections: string[] = []
   if (useWeb) {
-    const results = await window.loclm.web.search(query, state.settings.web)
-    sections.push(formatWebContext(results))
+    onProgress('web-search', 'active')
+    const results = await window.loclm.web.search(query, state.settings.web, language)
+    onProgress('web-search', 'complete', String(results.length), results)
+    sections.push(formatWebContext(results, language))
   }
   if (useGmail) {
+    onProgress('gmail-search', 'active')
     const threads = await window.loclm.gmail.search(query)
     const details = await Promise.all(threads.slice(0, 3).map(async (thread) => ({ thread, text: await window.loclm.gmail.getThreadText(thread.id) })))
-    sections.push(`\n\nA felhasználó által engedélyezett Gmail-környezet:\n${details.map(({ thread, text }) => `### ${thread.subject}\n${text.slice(0, 12000)}`).join('\n\n')}`)
+    onProgress('gmail-search', 'complete', String(details.length))
+    sections.push(`\n\n${t('gmailContext')}\n${details.map(({ thread, text }) => `### ${thread.subject}\n${text.slice(0, 12000)}`).join('\n\n')}`)
   }
   return sections.join('')
 }
 
-function formatWebContext(results: WebSearchResult[]): string {
-  if (!results.length) return '\n\nA webes keresés nem adott találatot.'
-  return `\n\nFriss webes keresési találatok. Hivatkozz a megadott URL-ekre:\n${results.map((result, index) => `${index + 1}. ${result.title}\nURL: ${result.url}\n${result.description}`).join('\n\n')}`
+function createActivity(useWeb: boolean, useGmail: boolean): AiActivityStep[] {
+  const types: AiActivityType[] = [
+    ...(useWeb ? ['web-search' as const] : []),
+    ...(useGmail ? ['gmail-search' as const] : []),
+    'generating'
+  ]
+  return types.map((type, index) => ({ id: crypto.randomUUID(), type, status: index === 0 ? 'active' : 'pending' }))
+}
+
+function advanceActivity(message: ChatMessage, type: AiActivityType, status: AiActivityStatus, detail?: string, sources?: WebSearchResult[]): ChatMessage {
+  const updated = (message.activity ?? []).map((step) => step.type === type ? { ...step, status, detail } : step)
+  if (status === 'complete') {
+    const nextIndex = updated.findIndex((step) => step.status === 'pending')
+    if (nextIndex >= 0) updated[nextIndex] = { ...updated[nextIndex], status: 'active' }
+  }
+  return { ...message, activity: updated, sources: sources ?? message.sources }
+}
+
+function finishActivity(activity: AiActivityStep[] | undefined, status: Extract<AiActivityStatus, 'complete' | 'error'>): AiActivityStep[] | undefined {
+  return activity?.map((step) => step.status === 'active' || step.status === 'pending' ? { ...step, status } : step)
+}
+
+function formatWebContext(results: WebSearchResult[], language: AppLanguage): string {
+  const t = getTranslator(language)
+  if (!results.length) return `\n\n${t('noWebResults')}`
+  return `\n\n${t('webContext')}\n${results.map((result, index) => `${index + 1}. ${result.title}\nURL: ${result.url}\n${result.description}`).join('\n\n')}`
+}
+
+const STANDARD_SYSTEM_PROMPTS = new Set([
+  'You are a helpful, accurate local AI assistant. Clearly disclose when an action uses an external service.',
+  'Segítőkész, pontos, helyi AI-asszisztens vagy.',
+  'Segítőkész, pontos, helyi AI-asszisztens vagy. Jelezd világosan, ha egy művelet külső szolgáltatást használ.'
+])
+
+function defaultSystemPrompt(language: AppLanguage): string {
+  return language === 'hu'
+    ? 'Segítőkész, pontos, helyi AI-asszisztens vagy. Jelezd világosan, ha egy művelet külső szolgáltatást használ.'
+    : 'You are a helpful, accurate local AI assistant. Clearly disclose when an action uses an external service.'
 }
 
 function errorMessage(error: unknown): string {

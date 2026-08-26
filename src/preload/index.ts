@@ -34,6 +34,7 @@ const api: LoclmApi = {
   },
   gmail: {
     status: () => ipcRenderer.invoke('gmail:status'),
+    configuration: () => ipcRenderer.invoke('gmail:configuration'),
     connect: (clientId) => ipcRenderer.invoke('gmail:connect', clientId),
     disconnect: () => ipcRenderer.invoke('gmail:disconnect'),
     search: (query) => ipcRenderer.invoke('gmail:search', query),
@@ -43,7 +44,7 @@ const api: LoclmApi = {
     modifyThread: (threadId, addLabelIds, removeLabelIds) => ipcRenderer.invoke('gmail:modify-thread', threadId, addLabelIds, removeLabelIds)
   },
   web: {
-    search: (query, settings) => ipcRenderer.invoke('web:search', query, settings),
+    search: (query, settings, language) => ipcRenderer.invoke('web:search', query, settings, language),
     openExternal: (url) => ipcRenderer.invoke('web:open-external', url)
   },
   updater: {

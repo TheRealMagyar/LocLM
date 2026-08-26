@@ -9,6 +9,7 @@ async function main() {
   const screenshotDir = process.env.LOCLM_SMOKE_SCREENSHOT_DIR
   if (screenshotDir) await fs.mkdir(screenshotDir, { recursive: true })
   const requests = []
+  const chatBodies = []
   const server = http.createServer((request, response) => {
     requests.push(`${request.method} ${request.url}`)
     if (request.url === '/v1/models') {
@@ -16,11 +17,28 @@ async function main() {
       response.end(JSON.stringify({ data: [{ id: 'loclm-test-model' }] }))
       return
     }
+    if (request.url?.startsWith('/tools/searxng/search?')) {
+      response.setHeader('content-type', 'application/json')
+      response.end(JSON.stringify({ results: [{ title: '<b>LocLM web result</b>', url: 'https://example.com/fresh', content: 'Current fact from the web &amp; verified.' }] }))
+      return
+    }
+    if (request.url?.startsWith('/browser-search?')) {
+      response.setHeader('content-type', 'text/html; charset=utf-8')
+      response.end('<!doctype html><html><body><div class="result"><h2><a class="result__a" href="https://example.com/browser-fresh"><b>LocLM browser result</b></a></h2><div class="result__snippet">Current fact from the background browser &amp; verified.</div></div></body></html>')
+      return
+    }
     if (request.url === '/v1/chat/completions') {
-      response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' })
-      response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'Teszt ' } }] })}\n\n`)
-      response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'válasz rendben.' } }] })}\n\n`)
-      response.end('data: [DONE]\n\n')
+      let body = ''
+      request.on('data', (chunk) => { body += chunk })
+      request.on('end', () => {
+        chatBodies.push(JSON.parse(body))
+        response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' })
+        response.write(`data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: 'A strukturált modell-indoklás. ' } }] })}\n\n`)
+        response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: '<thi' } }] })}\n\n`)
+        response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'nk>Címkés gondolat.</think>Teszt ' } }] })}\n\n`)
+        response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'válasz rendben.' } }] })}\n\n`)
+        response.end('data: [DONE]\n\n')
+      })
       return
     }
     response.writeHead(404)
@@ -36,7 +54,11 @@ async function main() {
       executablePath: packagedExecutable || path.join(process.cwd(), 'node_modules', 'electron', 'dist', process.platform === 'win32' ? 'electron.exe' : 'electron'),
       args: packagedExecutable ? [] : ['.'],
       cwd: process.cwd(),
-      env: { ...process.env, LOCLM_USER_DATA_DIR: userDataDir }
+      env: {
+        ...process.env,
+        LOCLM_USER_DATA_DIR: userDataDir,
+        LOCLM_BROWSER_SEARCH_URL_TEMPLATE: 'http://127.0.0.1:12345/browser-search?q={query}&language={language}'
+      }
     })
     electronApp.on('console', (message) => {
       if (message.type() === 'error') errors.push(message.text())
@@ -46,40 +68,79 @@ async function main() {
     await window.waitForSelector('.app-shell')
     await window.waitForSelector('.app-titlebar')
     await window.waitForSelector('.brand-logo')
+    await window.waitForFunction(() => document.documentElement.lang === 'en' && document.querySelector('.empty-chat h1')?.textContent === 'How can I help?')
 
-    await window.click('[aria-label="Új projekt"]')
+    await window.click('[aria-label="Settings"]')
+    const languageSelect = window.locator('select[aria-label="Language"]')
+    if (await languageSelect.inputValue() !== 'en') throw new Error('English is not the default language.')
+    await languageSelect.selectOption('hu')
+    await window.waitForFunction(() => document.documentElement.lang === 'hu' && document.querySelector('#settings-title')?.textContent === 'Beállítások')
+    await window.waitForFunction(async () => (await window.loclm.state.load()).settings.language === 'hu')
+    if (screenshotDir) await window.screenshot({ path: path.join(screenshotDir, 'settings-hu.png') })
+    await window.locator('select[aria-label="Nyelv"]').selectOption('en')
+    await window.waitForFunction(() => document.documentElement.lang === 'en' && document.querySelector('#settings-title')?.textContent === 'Settings')
+    await window.waitForFunction(async () => (await window.loclm.state.load()).settings.language === 'en')
+    if (screenshotDir) await window.screenshot({ path: path.join(screenshotDir, 'settings-en.png') })
+    await window.locator('.settings-header .icon-button').click()
+
+    await window.click('[aria-label="New project"]')
     await window.locator('.modal-panel input').fill('Smoke projekt')
     await window.locator('.modal-actions .primary-button').click()
     await window.waitForFunction(() => document.querySelector('.project-switcher')?.textContent?.includes('Smoke projekt'))
 
     await window.locator('.project-switcher').click()
-    await window.locator('[aria-label="Smoke projekt átnevezése"]').click()
+    await window.waitForSelector('#project-menu')
+    await window.locator('.chat-main').click({ position: { x: 24, y: 120 } })
+    await window.waitForFunction(() => !document.querySelector('#project-menu'))
+
+    await window.locator('.project-switcher').click()
+    await window.locator('[aria-label="Rename: Smoke projekt"]').click()
     await window.locator('.modal-panel input').fill('Átnevezett projekt')
     await window.locator('.modal-actions .primary-button').click()
     await window.waitForFunction(() => document.querySelector('.project-switcher')?.textContent?.includes('Átnevezett projekt'))
 
-    await window.locator('[aria-label="Projektfájlok"]').click()
+    await window.locator('[aria-label="Project files"]').click()
     await window.waitForSelector('.files-main .files-empty')
     if (screenshotDir) await window.screenshot({ path: path.join(screenshotDir, 'project-files.png') })
-    await window.locator('[aria-label="Chatek"]').click()
+    await window.locator('[aria-label="Chats"]').click()
     await window.waitForSelector('.chat-main .composer')
 
-    await window.click('[aria-label="Új projekt"]')
+    await window.click('[aria-label="New project"]')
     await window.locator('.modal-panel input').fill('Törlendő projekt')
     await window.locator('.modal-actions .primary-button').click()
     await window.locator('.project-switcher').click()
-    await window.locator('[aria-label="Törlendő projekt törlése"]').click()
+    await window.locator('[aria-label="Delete: Törlendő projekt"]').click()
     await window.locator('.modal-actions .danger-button').click()
     await window.waitForFunction(() => !document.querySelector('.project-switcher')?.textContent?.includes('Törlendő projekt'))
 
-    await window.click('[aria-label="Beállítások"]')
+    await window.locator('.composer .tool-button').filter({ hasText: 'Web' }).click()
+    await window.waitForFunction(() => [...document.querySelectorAll('.composer .tool-button')].some((button) => button.textContent?.includes('Web') && button.classList.contains('active')))
+
+    await window.click('[aria-label="Settings"]')
     if (screenshotDir) await window.screenshot({ path: path.join(screenshotDir, 'settings.png') })
     await window.locator('input[placeholder="http://127.0.0.1:1234/v1"]').fill('http://127.0.0.1:12345/v1')
     await window.locator('input[placeholder="Model ID"]').fill('loclm-test-model')
+    await window.getByRole('tab', { name: 'Plugins' }).click()
+    const webSettings = window.locator('.integration-box').filter({ hasText: 'Web search provider' })
+    if (await webSettings.locator('select').inputValue() !== 'browser') throw new Error('The keyless browser is not the default web search provider.')
+    await webSettings.locator('input[aria-label="Test search query"]').fill('LocLM browser web test')
+    await webSettings.getByRole('button', { name: /Test search/ }).click()
+    await webSettings.locator('.success-text').waitFor()
+
+    await webSettings.locator('select').selectOption('searxng')
+    await webSettings.locator('label.field input').fill('http://127.0.0.1:12345/tools/searxng')
+    await webSettings.locator('input[aria-label="Test search query"]').fill('LocLM web test')
+    await webSettings.getByRole('button', { name: /Test search/ }).click()
+    await webSettings.locator('.success-text').waitFor()
+    await webSettings.locator('select').selectOption('browser')
+    await window.waitForFunction(async () => (await window.loclm.state.load()).settings.web.provider === 'browser')
+    if (screenshotDir) await window.screenshot({ path: path.join(screenshotDir, 'web-search-settings.png') })
     await window.locator('.settings-header .icon-button').click()
 
     await window.locator('.composer textarea').fill('Mondj egy rövid tesztet')
     await window.locator('.send-button').click()
+    await window.waitForSelector('.message.assistant .reasoning-panel.streaming .reasoning-content')
+    if (await window.locator('.message.assistant .reasoning-trigger').last().getAttribute('aria-expanded') !== 'true') throw new Error('A gondolkodási panel nem nyílt ki automatikusan streamelés közben.')
     try {
       await window.waitForFunction(() => document.querySelector('.message.assistant .message-body')?.textContent?.includes('Teszt válasz rendben.'), undefined, { timeout: 15_000 })
     } catch (error) {
@@ -90,9 +151,26 @@ async function main() {
     const responseText = await window.locator('.message.assistant .message-body').textContent()
     if (errors.length) throw new Error(`Renderer hibák: ${errors.join(' | ')}`)
     if (!responseText?.includes('Teszt válasz rendben.')) throw new Error('A streaming modellválasz nem jelent meg.')
+    const assistantMessage = window.locator('.message.assistant').last()
+    await assistantMessage.locator('.reasoning-trigger').click()
+    const reasoningText = await assistantMessage.locator('.published-reasoning').textContent()
+    if (!reasoningText?.includes('A strukturált modell-indoklás.') || !reasoningText.includes('Címkés gondolat.')) throw new Error(`A modell reasoningje nem jelent meg helyesen: ${reasoningText ?? 'nincs'}`)
+    await assistantMessage.locator('.sources-trigger').click()
+    const sourceLink = assistantMessage.locator('.source-list a').first()
+    if (await sourceLink.getAttribute('href') !== 'https://example.com/browser-fresh') throw new Error('A webes forrás nem kattintható vagy hibás URL-t kapott.')
+    if (screenshotDir) await window.screenshot({ path: path.join(screenshotDir, 'chat-reasoning-sources.png') })
+    await window.waitForFunction(async () => {
+      const loaded = await window.loclm.state.load()
+      const assistant = loaded.chats.flatMap((chat) => chat.messages).findLast((message) => message.role === 'assistant')
+      return assistant?.reasoning?.includes('Címkés gondolat.') && assistant.sources?.some((source) => source.url === 'https://example.com/browser-fresh')
+    })
+    const systemContext = chatBodies[0]?.messages?.find((message) => message.role === 'system')?.content ?? ''
+    if (!systemContext.includes('https://example.com/browser-fresh') || !systemContext.includes('Current fact from the background browser & verified.')) {
+      throw new Error(`A webes találat nem került a modell kontextusába: ${systemContext.slice(-500)}`)
+    }
 
     const captureWindowPromise = electronApp.waitForEvent('window')
-    await window.locator('.composer .tool-button').filter({ hasText: 'Kivágás' }).click()
+    await window.locator('.composer .tool-button').filter({ hasText: 'Capture' }).click()
     const captureWindow = await captureWindowPromise
     await captureWindow.waitForSelector('.capture-stage')
     const captureStage = await captureWindow.locator('.capture-stage').boundingBox()
@@ -103,10 +181,10 @@ async function main() {
     await captureWindow.mouse.up()
     await captureWindow.locator('.capture-actions .primary-button').click()
     await window.waitForFunction(() => document.querySelectorAll('.message.user').length >= 2, undefined, { timeout: 15_000 })
-    await window.locator('[aria-label="Projektfájlok"]').click()
+    await window.locator('[aria-label="Project files"]').click()
     await window.waitForSelector('.files-main .file-card')
     const projectFileName = await window.locator('.file-card-body strong').first().textContent()
-    if (!projectFileName?.includes('Képernyőkivágás')) throw new Error('A képernyőkivágás nem került be a projektmappába.')
+    if (!projectFileName?.includes('Screenshot')) throw new Error('The screenshot was not added to the project folder.')
     if (screenshotDir) await window.screenshot({ path: path.join(screenshotDir, 'project-files-populated.png') })
 
     console.log('LocLM Electron smoke test: PASS')

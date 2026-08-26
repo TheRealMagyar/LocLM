@@ -8,7 +8,7 @@ import { DocumentService } from './document-service'
 import { GmailService } from './gmail-service'
 import { UpdaterService } from './updater-service'
 import { WebSearchService } from './web-service'
-import type { CaptureSelection, ChatRequest, ModelProfile, PersistedState, SecretSettings, WebSettings } from '../shared/types'
+import type { AppLanguage, CaptureSelection, ChatRequest, ModelProfile, PersistedState, SecretSettings, WebSettings } from '../shared/types'
 
 if (process.env.LOCLM_USER_DATA_DIR) app.setPath('userData', process.env.LOCLM_USER_DATA_DIR)
 
@@ -22,7 +22,7 @@ const vault = new CredentialVault()
 const aiService = new AiService()
 const documentService = new DocumentService()
 const webService = new WebSearchService()
-const gmailService = new GmailService(vault)
+const gmailService = new GmailService(vault, import.meta.env.MAIN_VITE_GOOGLE_CLIENT_ID ?? '')
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -111,7 +111,13 @@ function registerIpc(): void {
   ipcMain.on('capture:cancel', () => captureService.cancel())
 
   ipcMain.handle('gmail:status', () => gmailService.status())
-  ipcMain.handle('gmail:connect', (_event, clientId: string) => gmailService.connect(clientId))
+  ipcMain.handle('gmail:configuration', () => gmailService.configuration())
+  ipcMain.handle('gmail:connect', async (_event, clientId?: string) => {
+    const status = await gmailService.connect(clientId)
+    mainWindow?.show()
+    mainWindow?.focus()
+    return status
+  })
   ipcMain.handle('gmail:disconnect', () => gmailService.disconnect())
   ipcMain.handle('gmail:search', (_event, query: string) => gmailService.search(query))
   ipcMain.handle('gmail:get-thread-text', (_event, threadId: string) => gmailService.getThreadText(threadId))
@@ -119,7 +125,7 @@ function registerIpc(): void {
   ipcMain.handle('gmail:send-draft', (_event, draftId: string) => gmailService.sendDraft(draftId))
   ipcMain.handle('gmail:modify-thread', (_event, threadId: string, addLabelIds: string[], removeLabelIds: string[]) => gmailService.modifyThread(threadId, addLabelIds, removeLabelIds))
 
-  ipcMain.handle('web:search', (_event, query: string, settings: WebSettings) => webService.search(query, settings, vault.getSecrets().braveApiKey))
+  ipcMain.handle('web:search', (_event, query: string, settings: WebSettings, language: AppLanguage) => webService.search(query, settings, vault.getSecrets().braveApiKey, language))
   ipcMain.handle('web:open-external', async (_event, url: string) => {
     if (!/^https?:\/\//i.test(url)) throw new Error('Csak HTTP(S) link nyitható meg.')
     await shell.openExternal(url)
@@ -185,4 +191,5 @@ app.on('window-all-closed', () => {
 app.on('will-quit', () => {
   captureService?.dispose()
   updaterService?.dispose()
+  webService.dispose()
 })

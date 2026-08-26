@@ -8,14 +8,16 @@ A LocLM egy local-first, Electron + React + Vite alapú AI-kezelő alkalmazás. 
 - Kereshető projektmappa képekhez és dokumentumokhoz, megnyitás és mappában megjelenítés műveletekkel.
 - LM Studio és más OpenAI-kompatibilis helyi végpontok.
 - Streaming modellválasz és generálás megszakítása.
+- Összecsukható, élő gondolkodási munkafolyamat; a reasoning-modellek által publikált `reasoning_content` és `<think>` blokkok külön megjelenítése.
 - Globális, átállítható képernyőkivágás (`Ctrl+Shift+S`).
 - PNG/JPEG/WebP képek és screenshotok továbbítása vision modelleknek.
 - PDF, Word, szöveg, Markdown, JSON és CSV beolvasása.
 - AI-válasz exportálása Word vagy PDF formátumba.
-- Brave Search vagy saját SearXNG webes keresés.
+- API-kulcs nélküli, rejtett Chromium-alapú webes keresés DuckDuckGo/Bing tartalékkal; opcionális Brave Search vagy saját SearXNG.
 - Gmail OAuth, keresés, teljes levélszálak, címkék, archiválás és piszkozatok.
 - GitHub Releases-alapú automatikus frissítés.
 - Világos, sötét és rendszerhez igazodó téma.
+- Angol alapértelmezett felület, a Beállításokban választható magyar nyelvvel.
 - Egyedi, villámos LocLM arculat és natív hatású, saját Electron címsor.
 
 ## Fejlesztői indítás
@@ -66,10 +68,14 @@ A LocLM rendszerböngészőben végzi a belépést, PKCE-t és ideiglenes localh
 
 ## Webes keresés
 
+- Beépített böngésző: ez az alapértelmezett, API-kulcs nélkül működik. A LocLM egy elkülönített, rejtett Electron/Chromium ablakban keres a DuckDuckGo oldalán, szükség esetén Bing tartalékkal, majd csak a megtisztított címeket, URL-eket és kivonatokat adja át a modellnek.
 - Brave Search: add meg a Brave Search API-kulcsot a Pluginok alatt.
 - SearXNG: válaszd a SearXNG szolgáltatót, majd add meg a saját példány URL-jét.
 
+A beépített böngésző azonnal használható. A beállításokban bármelyik szolgáltatóval futtatható tesztkeresés; sikeres válasznál a LocLM megjeleníti a találatok számát, hibánál pedig közvetlenül kiírja a problémát.
+
 A Web gomb bekapcsolásakor a következő üzenet webes találatai bekerülnek a modell kontextusába, a forrás URL-ekkel együtt.
+Az asszisztens válasza mellett egy külön Források panelen minden találat címe, domainje és kivonata megnyitható; ezek a chatelőzménnyel együtt elmentődnek.
 
 ## Automatikus frissítés
 

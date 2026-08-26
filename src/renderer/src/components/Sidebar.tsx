@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Blocks, ChevronDown, FolderOpen, MessageSquare, MoreHorizontal, Pencil, Plus, Search, Settings2, Trash2 } from 'lucide-react'
 import BrandLogo from './BrandLogo'
 import { getTranslator, localeFor } from '../i18n'
@@ -28,12 +28,31 @@ interface SidebarProps {
 export default function Sidebar(props: SidebarProps): React.JSX.Element {
   const [projectMenuOpen, setProjectMenuOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const projectSwitcherRef = useRef<HTMLDivElement>(null)
   const t = getTranslator(props.language)
   const locale = localeFor(props.language)
   const activeProject = props.projects.find((project) => project.id === props.activeProjectId)
   const projectChats = useMemo(() => props.chats
     .filter((chat) => chat.projectId === props.activeProjectId && chat.title.toLocaleLowerCase(locale).includes(query.toLocaleLowerCase(locale)))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), [locale, props.activeProjectId, props.chats, query])
+
+  useEffect(() => {
+    if (!projectMenuOpen) return
+
+    const closeOnOutsideClick = (event: PointerEvent): void => {
+      if (!projectSwitcherRef.current?.contains(event.target as Node)) setProjectMenuOpen(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setProjectMenuOpen(false)
+    }
+
+    document.addEventListener('pointerdown', closeOnOutsideClick)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [projectMenuOpen])
 
   return (
     <>
@@ -46,15 +65,15 @@ export default function Sidebar(props: SidebarProps): React.JSX.Element {
       </aside>
 
       <aside className="project-sidebar">
-        <div className="project-switcher-wrap">
-          <button className="project-switcher" type="button" aria-expanded={projectMenuOpen} onClick={() => setProjectMenuOpen((open) => !open)}>
+        <div className="project-switcher-wrap" ref={projectSwitcherRef}>
+          <button className="project-switcher" type="button" aria-controls="project-menu" aria-expanded={projectMenuOpen} onClick={() => setProjectMenuOpen((open) => !open)}>
             <span className="project-avatar">{activeProject?.name.slice(0, 1).toUpperCase() ?? 'L'}</span>
             <span>{activeProject?.name ?? t('project')}</span>
             <ChevronDown size={15} />
           </button>
           <button className="icon-button compact" type="button" aria-label={t('newProject')} onClick={props.onNewProject}><Plus size={16} /></button>
           {projectMenuOpen && (
-            <div className="project-menu">
+            <div className="project-menu" id="project-menu">
               <div className="project-menu-label">{t('projects')}</div>
               {props.projects.map((project) => (
                 <div className={`project-menu-row ${project.id === props.activeProjectId ? 'active' : ''}`} key={project.id}>

@@ -19,6 +19,19 @@ export interface ChatMessage {
   createdAt: string
   status: MessageStatus
   attachments?: Attachment[]
+  reasoning?: string
+  sources?: WebSearchResult[]
+  activity?: AiActivityStep[]
+}
+
+export type AiActivityType = 'web-search' | 'gmail-search' | 'generating'
+export type AiActivityStatus = 'pending' | 'active' | 'complete' | 'error'
+
+export interface AiActivityStep {
+  id: string
+  type: AiActivityType
+  status: AiActivityStatus
+  detail?: string
 }
 
 export interface Chat {
@@ -70,7 +83,8 @@ export interface GmailSettings {
 }
 
 export interface WebSettings {
-  provider: 'brave' | 'searxng'
+  provider: 'browser' | 'brave' | 'searxng'
+  browserEngine: 'automatic'
   searxngUrl: string
 }
 
@@ -114,7 +128,7 @@ export interface ChatRequest {
 
 export interface ChatStreamEvent {
   requestId: string
-  type: 'chunk' | 'done' | 'error'
+  type: 'chunk' | 'reasoning' | 'done' | 'error'
   content?: string
   error?: string
 }
@@ -148,6 +162,10 @@ export interface FileReadResult {
 export interface GmailConnectionStatus {
   connected: boolean
   email?: string
+}
+
+export interface GmailConfiguration {
+  hasBuiltInClientId: boolean
 }
 
 export interface GmailThreadSummary {
