@@ -3,7 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { SecretSettings } from '../shared/types'
 
-type StoredSecrets = Record<keyof SecretSettings | 'gmailTokens', string>
+type StoredSecrets = Record<keyof SecretSettings, string>
 
 export class CredentialVault {
   private readonly filePath = join(app.getPath('userData'), 'loclm-secrets.json')
@@ -11,7 +11,12 @@ export class CredentialVault {
 
   async initialize(): Promise<void> {
     try {
-      this.stored = JSON.parse(await readFile(this.filePath, 'utf8')) as Partial<StoredSecrets>
+      const parsed = JSON.parse(await readFile(this.filePath, 'utf8')) as Partial<StoredSecrets>
+      this.stored = {
+        ...(typeof parsed.modelApiKey === 'string' ? { modelApiKey: parsed.modelApiKey } : {}),
+        ...(typeof parsed.braveApiKey === 'string' ? { braveApiKey: parsed.braveApiKey } : {})
+      }
+      await this.persist()
     } catch {
       this.stored = {}
     }
@@ -29,22 +34,6 @@ export class CredentialVault {
       if (value) this.stored[key] = this.encrypt(value)
       else delete this.stored[key]
     }
-    await this.persist()
-  }
-
-  getGmailTokens<T>(): T | undefined {
-    const raw = this.readSecret('gmailTokens')
-    if (!raw) return undefined
-    try {
-      return JSON.parse(raw) as T
-    } catch {
-      return undefined
-    }
-  }
-
-  async setGmailTokens(value?: unknown): Promise<void> {
-    if (value) this.stored.gmailTokens = this.encrypt(JSON.stringify(value))
-    else delete this.stored.gmailTokens
     await this.persist()
   }
 

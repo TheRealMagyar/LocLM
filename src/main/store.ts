@@ -63,16 +63,12 @@ function createDefaultState(): PersistedState {
         autoDownload: true,
         installOnQuit: true
       },
-      gmail: {
-        clientId: ''
-      },
       web: {
         provider: 'browser',
         browserEngine: 'automatic',
         searxngUrl: 'http://127.0.0.1:8080'
       },
       plugins: {
-        gmail: false,
         web: true,
         vision: true,
         documents: true
@@ -107,12 +103,13 @@ export class StateStore {
           ...parsed,
           projects: parsed.projects.map((project) => ({
             ...project,
+            enabledPlugins: project.enabledPlugins.filter((plugin) => plugin === 'web' || plugin === 'vision' || plugin === 'documents'),
             files: Array.isArray(project.files) ? project.files : [],
             learningGames: Array.isArray(project.learningGames) ? project.learningGames : []
           })),
           settings: {
-            ...parsed.settings,
             language: parsed.settings.language === 'hu' ? 'hu' : 'en',
+            theme: parsed.settings.theme,
             modelSource: parsed.settings.modelSource === 'grok' || parsed.settings.modelSource === 'codex' ? parsed.settings.modelSource : 'local',
             model: {
               source: 'local',
@@ -126,12 +123,19 @@ export class StateStore {
               ...createDefaultCodexSettings(),
               ...parsed.settings.codex
             },
+            capture: parsed.settings.capture,
+            updates: parsed.settings.updates,
             web: {
               ...parsed.settings.web,
               provider: parsed.settings.web.browserEngine
                 ? parsed.settings.web.provider
                 : parsed.settings.web.provider === 'brave' ? 'browser' : parsed.settings.web.provider,
               browserEngine: 'automatic'
+            },
+            plugins: {
+              web: parsed.settings.plugins.web ?? true,
+              vision: parsed.settings.plugins.vision ?? true,
+              documents: parsed.settings.plugins.documents ?? true
             }
           }
         }

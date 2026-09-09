@@ -1,13 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Check, ChevronDown, Cpu, Download, ExternalLink, FileText, Github, Globe2, Image, Mail, RefreshCw, ScanLine, Search, ShieldCheck, Sparkles, SquareTerminal, X } from 'lucide-react'
+import { Check, Cpu, Download, ExternalLink, FileText, Github, Globe2, Image, RefreshCw, ScanLine, Search, ShieldCheck, Sparkles, SquareTerminal, X } from 'lucide-react'
 import { getTranslator, type Translate } from '../i18n'
 import { activeModelProfile } from '@shared/model'
 import type {
   AppSettings,
   CodexConnectionStatus,
-  GmailConfiguration,
-  GmailConnectionStatus,
-  GmailThreadSummary,
   GrokConnectionStatus,
   ModelDescriptor,
   SecretSettings,
@@ -19,7 +16,6 @@ interface SettingsPanelProps {
   initialTab: string
   settings: AppSettings
   secrets: SecretSettings
-  gmailStatus: GmailConnectionStatus
   grokStatus: GrokConnectionStatus
   codexStatus: CodexConnectionStatus
   appInfo: { version: string; platform: string }
@@ -27,7 +23,6 @@ interface SettingsPanelProps {
   onClose: () => void
   onSettingsChange: (settings: AppSettings) => void
   onSecretsChange: (secrets: SecretSettings) => void
-  onGmailStatusChange: (status: GmailConnectionStatus) => void
   onGrokStatusChange: (status: GrokConnectionStatus) => void
   onCodexStatusChange: (status: CodexConnectionStatus) => void
 }
@@ -39,12 +34,6 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
   const [models, setModels] = useState<ModelDescriptor[]>([])
   const [modelStatus, setModelStatus] = useState('')
   const [busy, setBusy] = useState(false)
-  const [gmailQuery, setGmailQuery] = useState('is:unread')
-  const [gmailResults, setGmailResults] = useState<GmailThreadSummary[]>([])
-  const [gmailBusy, setGmailBusy] = useState(false)
-  const [gmailConfiguration, setGmailConfiguration] = useState<GmailConfiguration>({ hasBuiltInClientId: false })
-  const [gmailConnectionMessage, setGmailConnectionMessage] = useState('')
-  const [gmailAdvancedOpen, setGmailAdvancedOpen] = useState(false)
   const [grokBusy, setGrokBusy] = useState(false)
   const [grokConnectionMessage, setGrokConnectionMessage] = useState('')
   const [codexBusy, setCodexBusy] = useState(false)
@@ -62,7 +51,6 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
 
   useEffect(() => {
     if (!props.open) return
-    void window.loclm.gmail.configuration().then(setGmailConfiguration)
     void window.loclm.grok.status().then(props.onGrokStatusChange)
     void window.loclm.codex.status().then(props.onCodexStatusChange)
   }, [props.open])
@@ -150,25 +138,6 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
     updateSettings('plugins', { ...props.settings.plugins, [plugin]: !props.settings.plugins[plugin] })
   }
 
-  const connectGmail = async (): Promise<void> => {
-    if (!gmailConfiguration.hasBuiltInClientId && !props.settings.gmail.clientId.trim()) {
-      setGmailAdvancedOpen(true)
-      setGmailConnectionMessage(t('gmailClientIdRequired'))
-      return
-    }
-    setGmailBusy(true)
-    setGmailConnectionMessage(t('openingGoogleBrowser'))
-    try {
-      props.onGmailStatusChange(await window.loclm.gmail.connect(props.settings.gmail.clientId))
-      setGmailConnectionMessage(t('gmailConnectedSuccess'))
-      if (!props.settings.plugins.gmail) togglePlugin('gmail')
-    } catch (error) {
-      setGmailConnectionMessage(errorMessage(error))
-    } finally {
-      setGmailBusy(false)
-    }
-  }
-
   const connectGrok = async (): Promise<void> => {
     setGrokBusy(true)
     setGrokConnectionMessage(t('openingGrokBrowser'))
@@ -210,23 +179,6 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
     setCodexConnectionMessage('')
     setModels([])
     updateSettings('modelSource', 'local')
-  }
-
-  const disconnectGmail = async (): Promise<void> => {
-    await window.loclm.gmail.disconnect()
-    props.onGmailStatusChange({ connected: false })
-    setGmailConnectionMessage('')
-  }
-
-  const searchGmail = async (): Promise<void> => {
-    setGmailBusy(true)
-    try {
-      setGmailResults(await window.loclm.gmail.search(gmailQuery))
-    } catch (error) {
-      setModelStatus(errorMessage(error))
-    } finally {
-      setGmailBusy(false)
-    }
   }
 
   const applyShortcut = async (): Promise<void> => {
@@ -307,7 +259,7 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
                     <div className="integration-title"><Sparkles size={16} /><strong>{t('grokSubscription')}</strong><span className={props.grokStatus.connected ? 'connected-badge' : 'muted-badge'}>{props.grokStatus.connected ? props.grokStatus.email ?? t('connected') : t('notConnected')}</span></div>
                     {!props.grokStatus.connected ? (
                       <>
-                        <p className="gmail-connect-description">{t('grokConnectDescription')}</p>
+                        <p className="integration-description">{t('grokConnectDescription')}</p>
                         <button className="oauth-connect-button" type="button" disabled={grokBusy} onClick={() => void connectGrok()}>
                           <span className="oauth-mark">G</span>
                           <span><strong>{grokBusy ? t('signingInGrok') : t('signInGrok')}</strong><small>{t('opensDefaultBrowser')}</small></span>
@@ -361,7 +313,7 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
                     </div>
                     {!props.codexStatus.installed ? (
                       <>
-                        <p className="gmail-connect-description">{t('codexInstallDescription')}</p>
+                        <p className="integration-description">{t('codexInstallDescription')}</p>
                         <button className="secondary-button" type="button" onClick={() => void window.loclm.web.openExternal('https://developers.openai.com/codex/cli')}>
                           <ExternalLink size={14} /> {t('openCodexInstallGuide')}
                         </button>
@@ -369,7 +321,7 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
                       </>
                     ) : !props.codexStatus.connected ? (
                       <>
-                        <p className="gmail-connect-description">{t('codexConnectDescription')}</p>
+                        <p className="integration-description">{t('codexConnectDescription')}</p>
                         <button className="oauth-connect-button" type="button" disabled={codexBusy} onClick={() => void connectCodex()}>
                           <span className="oauth-mark">O</span>
                           <span><strong>{codexBusy ? t('signingInCodex') : t('signInCodex')}</strong><small>{t('opensDefaultBrowser')}</small></span>
@@ -413,41 +365,9 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
 
           {tab === 'plugins' && (
             <div className="settings-section">
-              <PluginRow icon={<Mail size={17} />} title="Gmail" description={t('gmailDescription')} checked={props.settings.plugins.gmail} onChange={() => togglePlugin('gmail')} />
               <PluginRow icon={<Globe2 size={17} />} title={t('webSearch')} description={t('webSearchDescription')} checked={props.settings.plugins.web} onChange={() => togglePlugin('web')} />
               <PluginRow icon={<Image size={17} />} title={t('imageScreenshot')} description={t('imageScreenshotDescription')} checked={props.settings.plugins.vision} onChange={() => togglePlugin('vision')} />
               <PluginRow icon={<FileText size={17} />} title={t('documents')} description={t('documentsDescription')} checked={props.settings.plugins.documents} onChange={() => togglePlugin('documents')} />
-
-              {props.settings.plugins.gmail && (
-                <div className="integration-box">
-                  <div className="integration-title"><Mail size={16} /><strong>{t('gmailConnection')}</strong><span className={props.gmailStatus.connected ? 'connected-badge' : 'muted-badge'}>{props.gmailStatus.connected ? props.gmailStatus.email ?? t('connected') : t('notConnected')}</span></div>
-                  {!props.gmailStatus.connected ? (
-                    <>
-                      <p className="gmail-connect-description">{t('gmailConnectDescription')}</p>
-                      <button className="gmail-connect-button" type="button" disabled={gmailBusy} onClick={() => void connectGmail()}>
-                        <span className="google-mark">G</span>
-                        <span><strong>{gmailBusy ? t('connectingGmail') : t('connectGmail')}</strong><small>{t('opensDefaultBrowser')}</small></span>
-                        <ExternalLink size={15} />
-                      </button>
-                      {gmailConnectionMessage ? <div className={gmailConnectionMessage === t('gmailConnectedSuccess') ? 'success-text' : 'warning-text'} role="status">{gmailConnectionMessage}</div> : null}
-                      <button className="advanced-toggle" type="button" aria-expanded={gmailAdvancedOpen} onClick={() => setGmailAdvancedOpen((open) => !open)}>{t('advancedSetup')}<ChevronDown className={gmailAdvancedOpen ? 'expanded' : ''} size={14} /></button>
-                      {gmailAdvancedOpen ? (
-                        <div className="advanced-content">
-                          <label className="field"><span>{t('googleClientId')}</span><input value={props.settings.gmail.clientId} onChange={(event) => { updateSettings('gmail', { ...props.settings.gmail, clientId: event.target.value }); setGmailConnectionMessage('') }} placeholder="…apps.googleusercontent.com" /></label>
-                          <small>{t('gmailClientIdHelp')}</small>
-                        </div>
-                      ) : null}
-                      <div className="settings-note"><ShieldCheck size={15} /> {t('gmailPrivacyNote')}</div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="gmail-search-row"><input value={gmailQuery} onChange={(event) => setGmailQuery(event.target.value)} placeholder={t('gmailSearchQuery')} /><button className="secondary-button" type="button" onClick={() => void searchGmail()} disabled={gmailBusy}><Search size={14} /> {t('search')}</button></div>
-                      {gmailResults.length > 0 && <div className="gmail-results">{gmailResults.slice(0, 5).map((thread) => <div key={thread.id}><span className={thread.unread ? 'unread-dot' : 'read-dot'} /><div><strong>{thread.subject}</strong><small>{thread.from} · {thread.snippet}</small></div><button type="button" aria-label={t('archive')} onClick={() => void window.loclm.gmail.modifyThread(thread.id, [], ['INBOX'])}>{t('archive')}</button></div>)}</div>}
-                      <button className="text-button destructive" type="button" onClick={() => void disconnectGmail()}>{t('disconnectGmail')}</button>
-                    </>
-                  )}
-                </div>
-              )}
 
               {props.settings.plugins.web && (
                 <div className="integration-box">
@@ -456,7 +376,7 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
                   {props.settings.web.provider === 'brave' ? <label className="field"><span>{t('braveApiKey')}</span><input type="password" value={props.secrets.braveApiKey ?? ''} onChange={(event) => props.onSecretsChange({ ...props.secrets, braveApiKey: event.target.value })} onBlur={() => void window.loclm.secrets.set(props.secrets)} /></label> : null}
                   {props.settings.web.provider === 'searxng' ? <label className="field"><span>SearXNG URL</span><input value={props.settings.web.searxngUrl} onChange={(event) => updateWeb({ searxngUrl: event.target.value })} /></label> : null}
                   <div className="settings-note"><Globe2 size={15} /> {props.settings.web.provider === 'browser' ? t('browserSearchHint') : props.settings.web.provider === 'brave' ? t('braveSetupHint') : t('searxngSetupHint')}</div>
-                  <div className="gmail-search-row"><input aria-label={t('webTestQuery')} value={webTestQuery} onChange={(event) => setWebTestQuery(event.target.value)} placeholder={t('webTestQuery')} /><button className="secondary-button" type="button" disabled={webTestState.status === 'busy' || !webTestQuery.trim()} onClick={() => void testWebSearch()}><Search size={14} /> {webTestState.status === 'busy' ? t('testingSearch') : t('testSearch')}</button></div>
+                  <div className="settings-search-row"><input aria-label={t('webTestQuery')} value={webTestQuery} onChange={(event) => setWebTestQuery(event.target.value)} placeholder={t('webTestQuery')} /><button className="secondary-button" type="button" disabled={webTestState.status === 'busy' || !webTestQuery.trim()} onClick={() => void testWebSearch()}><Search size={14} /> {webTestState.status === 'busy' ? t('testingSearch') : t('testSearch')}</button></div>
                   {webTestState.message ? <div className={webTestState.status === 'success' ? 'success-text' : webTestState.status === 'error' ? 'warning-text' : 'muted-text'} role="status">{webTestState.message}</div> : null}
                 </div>
               )}

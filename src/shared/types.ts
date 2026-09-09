@@ -27,7 +27,7 @@ export interface ChatMessage {
   modelLabel?: string
 }
 
-export type AiActivityType = 'web-search' | 'gmail-search' | 'generating'
+export type AiActivityType = 'web-search' | 'generating'
 export type AiActivityStatus = 'pending' | 'active' | 'complete' | 'error'
 
 export interface AiActivityStep {
@@ -115,7 +115,7 @@ export interface LearningGame {
   updatedAt: string
 }
 
-export type PluginId = 'gmail' | 'web' | 'vision' | 'documents'
+export type PluginId = 'web' | 'vision' | 'documents'
 export type ModelSource = 'local' | 'grok' | 'codex'
 
 export interface ModelProfile {
@@ -152,11 +152,6 @@ export interface UpdateSettings {
   installOnQuit: boolean
 }
 
-export interface GmailSettings {
-  clientId: string
-  connectedEmail?: string
-}
-
 export interface WebSettings {
   provider: 'browser' | 'brave' | 'searxng'
   browserEngine: 'automatic'
@@ -172,7 +167,6 @@ export interface AppSettings {
   codex: CodexModelSettings
   capture: CaptureSettings
   updates: UpdateSettings
-  gmail: GmailSettings
   web: WebSettings
   plugins: Record<PluginId, boolean>
 }
@@ -254,34 +248,6 @@ export interface CaptureSelection {
 
 export interface FileReadResult {
   attachment: Attachment
-}
-
-export interface GmailConnectionStatus {
-  connected: boolean
-  email?: string
-}
-
-export interface GmailConfiguration {
-  hasBuiltInClientId: boolean
-}
-
-export interface GmailThreadSummary {
-  id: string
-  subject: string
-  from: string
-  date: string
-  snippet: string
-  unread: boolean
-}
-
-export interface GmailDraftInput {
-  to: string
-  cc?: string
-  subject: string
-  body: string
-  threadId?: string
-  inReplyTo?: string
-  references?: string
 }
 
 export interface WebSearchResult {

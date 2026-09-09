@@ -22,7 +22,6 @@ import type {
   ChatMessage,
   ChatStreamEvent,
   CodexConnectionStatus,
-  GmailConnectionStatus,
   GrokConnectionStatus,
   LearningGame,
   ModelDescriptor,
@@ -50,7 +49,6 @@ interface QueuedTurn {
   text: string
   attachments: Attachment[]
   webEnabled: boolean
-  gmailEnabled: boolean
   model: ModelProfile
 }
 
@@ -67,7 +65,6 @@ const timestamp = (): string => new Date().toISOString()
 export default function App(): React.JSX.Element {
   const [state, setState] = useState<PersistedState>()
   const [secrets, setSecrets] = useState<SecretSettings>({})
-  const [gmailStatus, setGmailStatus] = useState<GmailConnectionStatus>({ connected: false })
   const [grokStatus, setGrokStatus] = useState<GrokConnectionStatus>({ connected: false })
   const [codexStatus, setCodexStatus] = useState<CodexConnectionStatus>({ installed: false, connected: false })
   const [appInfo, setAppInfo] = useState({ version: '0.1.0', platform: 'desktop' })
@@ -75,7 +72,6 @@ export default function App(): React.JSX.Element {
   const [prompt, setPrompt] = useState('')
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([])
   const [webEnabled, setWebEnabled] = useState(false)
-  const [gmailEnabled, setGmailEnabled] = useState(false)
   const [activeRequests, setActiveRequests] = useState<Record<string, ActiveRequest>>({})
   const [queues, setQueues] = useState<Record<string, QueuedTurn[]>>({})
   const [modelCatalog, setModelCatalog] = useState<{ local: ModelDescriptor[]; grok: ModelDescriptor[]; codex: ModelDescriptor[] }>({ local: [], grok: [], codex: [] })
@@ -103,15 +99,13 @@ export default function App(): React.JSX.Element {
     void Promise.all([
       window.loclm.state.load(),
       window.loclm.secrets.get(),
-      window.loclm.gmail.status(),
       window.loclm.grok.status(),
       window.loclm.codex.status(),
       window.loclm.app.getInfo()
-    ]).then(([loadedState, loadedSecrets, loadedGmail, loadedGrok, loadedCodex, loadedInfo]) => {
+    ]).then(([loadedState, loadedSecrets, loadedGrok, loadedCodex, loadedInfo]) => {
       stateRef.current = loadedState
       setState(loadedState)
       setSecrets(loadedSecrets)
-      setGmailStatus(loadedGmail)
       setGrokStatus(loadedGrok)
       setCodexStatus(loadedCodex)
       setAppInfo(loadedInfo)
@@ -396,7 +390,6 @@ export default function App(): React.JSX.Element {
       text: userMessage.content,
       attachments,
       webEnabled,
-      gmailEnabled,
       model
     }
 
@@ -426,7 +419,7 @@ export default function App(): React.JSX.Element {
       content: '',
       createdAt: date,
       status: 'streaming',
-      activity: createActivity(turn.webEnabled, turn.gmailEnabled),
+      activity: createActivity(turn.webEnabled),
       modelId: turn.model.modelId,
       modelLabel
     }
@@ -458,7 +451,7 @@ export default function App(): React.JSX.Element {
     setActiveRequests(activeRequestsRef.current)
 
     try {
-      const pluginContext = await buildPluginContext(turn.text, turn.webEnabled, turn.gmailEnabled, current, current.settings.language, (type, status, detail, sources) => {
+      const pluginContext = await buildPluginContext(turn.text, turn.webEnabled, current, current.settings.language, (type, status, detail, sources) => {
         setState((latest) => latest ? updateMessage(latest, chat.id, assistantMessage.id, (message) => advanceActivity(message, type, status, detail, sources)) : latest)
       })
       if (activeRequestsRef.current[chatId]?.requestId !== request.requestId) return
@@ -757,7 +750,6 @@ export default function App(): React.JSX.Element {
           prompt={prompt}
           attachments={pendingAttachments}
           webEnabled={webEnabled}
-          gmailEnabled={gmailEnabled}
           generating={Boolean(activeChat && activeRequests[activeChat.id])}
           queueCount={(activeChat && queues[activeChat.id]?.length) || 0}
           language={language}
@@ -769,7 +761,6 @@ export default function App(): React.JSX.Element {
           onAttach={() => void attachFiles()}
           onCapture={() => void window.loclm.capture.open()}
           onToggleWeb={toggleWebSearch}
-          onToggleGmail={() => state.settings.plugins.gmail && gmailStatus.connected ? setGmailEnabled((value) => !value) : openSettings('plugins')}
           onRemoveAttachment={(id) => setPendingAttachments((items) => items.filter((item) => item.id !== id))}
           onAbort={abort}
           onOpenSettings={() => openSettings('model')}
@@ -792,7 +783,6 @@ export default function App(): React.JSX.Element {
         initialTab={settingsTab}
         settings={state.settings}
         secrets={secrets}
-        gmailStatus={gmailStatus}
         grokStatus={grokStatus}
         codexStatus={codexStatus}
         appInfo={appInfo}
@@ -800,7 +790,6 @@ export default function App(): React.JSX.Element {
         onClose={() => setSettingsOpen(false)}
         onSettingsChange={updateSettings}
         onSecretsChange={setSecrets}
-        onGmailStatusChange={setGmailStatus}
         onGrokStatusChange={setGrokStatus}
         onCodexStatusChange={setCodexStatus}
       />
@@ -929,10 +918,9 @@ function createTitle(content: string, fallback: string): string {
   return clean.length > 48 ? `${clean.slice(0, 48)}…` : clean || fallback
 }
 
-type PluginProgress = (type: Extract<AiActivityType, 'web-search' | 'gmail-search'>, status: Extract<AiActivityStatus, 'active' | 'complete'>, detail?: string, sources?: WebSearchResult[]) => void
+type PluginProgress = (type: Extract<AiActivityType, 'web-search'>, status: Extract<AiActivityStatus, 'active' | 'complete'>, detail?: string, sources?: WebSearchResult[]) => void
 
-async function buildPluginContext(query: string, useWeb: boolean, useGmail: boolean, state: PersistedState, language: AppLanguage, onProgress: PluginProgress): Promise<string> {
-  const t = getTranslator(language)
+async function buildPluginContext(query: string, useWeb: boolean, state: PersistedState, language: AppLanguage, onProgress: PluginProgress): Promise<string> {
   const sections: string[] = []
   if (useWeb) {
     onProgress('web-search', 'active')
@@ -940,20 +928,12 @@ async function buildPluginContext(query: string, useWeb: boolean, useGmail: bool
     onProgress('web-search', 'complete', String(results.length), results)
     sections.push(formatWebContext(results, language))
   }
-  if (useGmail) {
-    onProgress('gmail-search', 'active')
-    const threads = await window.loclm.gmail.search(query)
-    const details = await Promise.all(threads.slice(0, 3).map(async (thread) => ({ thread, text: await window.loclm.gmail.getThreadText(thread.id) })))
-    onProgress('gmail-search', 'complete', String(details.length))
-    sections.push(`\n\n${t('gmailContext')}\n${details.map(({ thread, text }) => `### ${thread.subject}\n${text.slice(0, 12000)}`).join('\n\n')}`)
-  }
   return sections.join('')
 }
 
-function createActivity(useWeb: boolean, useGmail: boolean): AiActivityStep[] {
+function createActivity(useWeb: boolean): AiActivityStep[] {
   const types: AiActivityType[] = [
     ...(useWeb ? ['web-search' as const] : []),
-    ...(useGmail ? ['gmail-search' as const] : []),
     'generating'
   ]
   return types.map((type, index) => ({ id: crypto.randomUUID(), type, status: index === 0 ? 'active' : 'pending' }))

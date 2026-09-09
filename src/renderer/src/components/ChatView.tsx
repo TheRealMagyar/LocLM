@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { ArrowUp, Camera, FileText, Globe2, Mail, Paperclip, Square, X } from 'lucide-react'
+import { ArrowUp, Camera, FileText, Globe2, Paperclip, Square, X } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Attachment, Chat, Project } from '@shared/types'
@@ -15,7 +15,6 @@ interface ChatViewProps {
   prompt: string
   attachments: Attachment[]
   webEnabled: boolean
-  gmailEnabled: boolean
   generating: boolean
   queueCount: number
   language: AppLanguage
@@ -27,7 +26,6 @@ interface ChatViewProps {
   onAttach: () => void
   onCapture: () => void
   onToggleWeb: () => void
-  onToggleGmail: () => void
   onRemoveAttachment: (id: string) => void
   onAbort: () => void
   onOpenSettings: () => void
@@ -153,7 +151,6 @@ export default function ChatView(props: ChatViewProps): React.JSX.Element {
             <button className="tool-button" type="button" onClick={props.onAttach}><Paperclip size={15} /> {t('file')}</button>
             <button className="tool-button" type="button" onClick={props.onCapture}><Camera size={15} /> {t('capture')}</button>
             <button className={`tool-button ${props.webEnabled ? 'active' : ''}`} type="button" aria-pressed={props.webEnabled} onClick={props.onToggleWeb}><Globe2 size={15} /> {t('web')}</button>
-            <button className={`tool-button ${props.gmailEnabled ? 'active' : ''}`} type="button" aria-pressed={props.gmailEnabled} onClick={props.onToggleGmail}><Mail size={15} /> {t('gmail')}</button>
             {props.generating ? <button className="stop-button" type="button" aria-label={t('stopGeneration')} onClick={props.onAbort}><Square size={13} fill="currentColor" /></button> : null}
             <button className="send-button" type="submit" aria-label={t('send')} disabled={!canSend}><ArrowUp size={16} /></button>
           </div>

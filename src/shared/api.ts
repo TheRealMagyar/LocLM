@@ -8,10 +8,6 @@ import type {
   ChatStreamEvent,
   CodexConnectionStatus,
   FileReadResult,
-  GmailConnectionStatus,
-  GmailConfiguration,
-  GmailDraftInput,
-  GmailThreadSummary,
   GrokConnectionStatus,
   ModelDescriptor,
   ModelProfile,
@@ -53,17 +49,6 @@ export interface LoclmApi {
     complete: (selection: CaptureSelection) => void
     cancel: () => void
     onCompleted: (callback: (payload: CapturePayload) => void) => () => void
-  }
-  gmail: {
-    status: () => Promise<GmailConnectionStatus>
-    configuration: () => Promise<GmailConfiguration>
-    connect: (clientId?: string) => Promise<GmailConnectionStatus>
-    disconnect: () => Promise<void>
-    search: (query: string) => Promise<GmailThreadSummary[]>
-    getThreadText: (threadId: string) => Promise<string>
-    createDraft: (input: GmailDraftInput) => Promise<{ id: string }>
-    sendDraft: (draftId: string) => Promise<void>
-    modifyThread: (threadId: string, addLabelIds: string[], removeLabelIds: string[]) => Promise<void>
   }
   grok: {
     status: () => Promise<GrokConnectionStatus>

@@ -1,6 +1,6 @@
 # LocLM
 
-LocLM is a local-first, Electron + React + Vite AI management app. It offers chats organized into projects, locally running OpenAI-compatible models, screenshot capture, document processing, web search, and Gmail integration.
+LocLM is a local-first, Electron + React + Vite AI management app. It offers chats organized into projects, locally running OpenAI-compatible models, screenshot capture, document processing, web search, and AI-assisted learning games.
 
 ## Main features
 
@@ -14,7 +14,6 @@ LocLM is a local-first, Electron + React + Vite AI management app. It offers cha
 - Reading PDF, Word, text, Markdown, JSON, and CSV.
 - Exporting AI responses to Word or PDF.
 - API-key-free, hidden Chromium-based web search with DuckDuckGo/Bing fallback; optional Brave Search or your own SearXNG.
-- Gmail OAuth, search, full email threads, labels, archiving, and drafts.
 - Automatic updates via GitHub Releases.
 - Light, dark, and system-matching theme.
 - English UI by default, with Hungarian available in Settings.
@@ -75,18 +74,6 @@ LocLM invokes stable non-interactive mode (`codex exec --json`) with an ephemera
 4. Select the listed model.
 5. For image processing, use a vision-capable model.
 
-## Gmail OAuth
-
-Connecting Gmail requires a Google Cloud Desktop OAuth client:
-
-1. Create a project in Google Cloud Console.
-2. Enable the Gmail API.
-3. Set up the OAuth consent screen.
-4. Create a Desktop app type OAuth client ID.
-5. Copy the client ID into LocLM Settings → Plugins → Gmail.
-
-LocLM performs login in the system browser, using PKCE and a temporary localhost callback. Tokens are encrypted with Electron `safeStorage`. Google may require OAuth verification for public distribution of Gmail scopes.
-
 ## Web search
 
 - Built-in browser: this is the default and works without an API key. LocLM searches DuckDuckGo in an isolated, hidden Electron/Chromium window, with Bing as fallback if needed, then only passes cleaned titles, URLs, and snippets to the model.
@@ -114,8 +101,7 @@ For production automatic updates, Windows and macOS packages must be released wi
 - The renderer does not get Node.js access.
 - `contextIsolation` and the Electron sandbox are enabled.
 - The preload only exposes typed, allowed IPC operations.
-- Local model and search keys, as well as Gmail tokens, go into encrypted storage.
-- Sending Gmail requires a separate user action.
+- Local model and search keys go into encrypted storage.
 - Only HTTP(S) URLs can be opened as external links.
 
 ## Project structure

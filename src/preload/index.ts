@@ -33,17 +33,6 @@ const api: LoclmApi = {
     cancel: () => ipcRenderer.send('capture:cancel'),
     onCompleted: (callback) => subscribe('capture:completed', callback)
   },
-  gmail: {
-    status: () => ipcRenderer.invoke('gmail:status'),
-    configuration: () => ipcRenderer.invoke('gmail:configuration'),
-    connect: (clientId) => ipcRenderer.invoke('gmail:connect', clientId),
-    disconnect: () => ipcRenderer.invoke('gmail:disconnect'),
-    search: (query) => ipcRenderer.invoke('gmail:search', query),
-    getThreadText: (threadId) => ipcRenderer.invoke('gmail:get-thread-text', threadId),
-    createDraft: (input) => ipcRenderer.invoke('gmail:create-draft', input),
-    sendDraft: (draftId) => ipcRenderer.invoke('gmail:send-draft', draftId),
-    modifyThread: (threadId, addLabelIds, removeLabelIds) => ipcRenderer.invoke('gmail:modify-thread', threadId, addLabelIds, removeLabelIds)
-  },
   grok: {
     status: () => ipcRenderer.invoke('grok:status'),
     connect: () => ipcRenderer.invoke('grok:connect'),

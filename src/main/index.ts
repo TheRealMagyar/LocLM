@@ -5,7 +5,6 @@ import { CredentialVault } from './vault'
 import { AiService } from './ai-service'
 import { CaptureService } from './capture-service'
 import { DocumentService } from './document-service'
-import { GmailService } from './gmail-service'
 import { UpdaterService } from './updater-service'
 import { WebSearchService } from './web-service'
 import { GrokService } from './grok-service'
@@ -25,7 +24,6 @@ const vault = new CredentialVault()
 const aiService = new AiService()
 const documentService = new DocumentService()
 const webService = new WebSearchService()
-const gmailService = new GmailService(vault, import.meta.env.MAIN_VITE_GOOGLE_CLIENT_ID ?? '')
 const grokService = new GrokService()
 const codexService = new CodexCliService(() => join(app.getPath('userData'), 'codex-workspace'))
 
@@ -150,21 +148,6 @@ function registerIpc(): void {
   ipcMain.handle('capture:get-source', () => captureService.getSource())
   ipcMain.on('capture:complete', (_event, selection: CaptureSelection) => captureService.complete(selection))
   ipcMain.on('capture:cancel', () => captureService.cancel())
-
-  ipcMain.handle('gmail:status', () => gmailService.status())
-  ipcMain.handle('gmail:configuration', () => gmailService.configuration())
-  ipcMain.handle('gmail:connect', async (_event, clientId?: string) => {
-    const status = await gmailService.connect(clientId)
-    mainWindow?.show()
-    mainWindow?.focus()
-    return status
-  })
-  ipcMain.handle('gmail:disconnect', () => gmailService.disconnect())
-  ipcMain.handle('gmail:search', (_event, query: string) => gmailService.search(query))
-  ipcMain.handle('gmail:get-thread-text', (_event, threadId: string) => gmailService.getThreadText(threadId))
-  ipcMain.handle('gmail:create-draft', (_event, input) => gmailService.createDraft(input))
-  ipcMain.handle('gmail:send-draft', (_event, draftId: string) => gmailService.sendDraft(draftId))
-  ipcMain.handle('gmail:modify-thread', (_event, threadId: string, addLabelIds: string[], removeLabelIds: string[]) => gmailService.modifyThread(threadId, addLabelIds, removeLabelIds))
 
   ipcMain.handle('grok:status', () => grokService.status())
   ipcMain.handle('grok:connect', async () => {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Brain, Check, ChevronDown, CircleAlert, ExternalLink, Globe2, LoaderCircle, Mail, Search } from 'lucide-react'
+import { Brain, Check, ChevronDown, CircleAlert, ExternalLink, Globe2, LoaderCircle, Search } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { getTranslator } from '../i18n'
@@ -82,9 +82,7 @@ function ActivityStep({ step, language }: { step: AiActivityStep; language: AppL
         ? <Check size={13} />
         : step.type === 'web-search'
           ? <Search size={13} />
-          : step.type === 'gmail-search'
-            ? <Mail size={13} />
-            : <Brain size={13} />
+          : <Brain size={13} />
 
   return (
     <div className={`activity-step ${step.status}`}>
@@ -97,7 +95,6 @@ function ActivityStep({ step, language }: { step: AiActivityStep; language: AppL
 function activityLabel(step: AiActivityStep, t: ReturnType<typeof getTranslator>): string {
   if (step.status === 'error') return t('stepFailed')
   if (step.type === 'web-search') return step.status === 'complete' ? t('searchedWeb', { count: step.detail ?? 0 }) : t('searchingWeb')
-  if (step.type === 'gmail-search') return step.status === 'complete' ? t('readGmail', { count: step.detail ?? 0 }) : t('readingGmail')
   return step.status === 'complete' ? t('answerGenerated') : t('generatingAnswer')
 }
 

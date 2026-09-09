@@ -504,14 +504,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .source-toggle { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border-radius: 10px; background: var(--surface-soft); }
 .source-toggle button { display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; padding: 9px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; font-size: 12px; font-weight: 600; }
 .source-toggle button[aria-selected="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 5px color-mix(in srgb, var(--text) 8%, transparent); }
-.oauth-connect-button, .gmail-connect-button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); cursor: pointer; text-align: left; }
-.oauth-connect-button:hover, .gmail-connect-button:hover { background: var(--surface-hover); }
-.oauth-connect-button:disabled, .gmail-connect-button:disabled { opacity: .55; cursor: default; }
-.oauth-connect-button span:nth-child(2), .gmail-connect-button span:nth-child(2) { min-width: 0; flex: 1; }
-.oauth-connect-button strong, .gmail-connect-button strong, .oauth-connect-button small, .gmail-connect-button small { display: block; }
-.oauth-connect-button small, .gmail-connect-button small { margin-top: 2px; color: var(--muted); font-size: 10px; font-weight: 400; }
-.oauth-mark, .google-mark { display: grid; place-items: center; flex: 0 0 auto; width: 32px; height: 32px; border-radius: 8px; background: var(--text); color: var(--bg); font-size: 14px; font-weight: 700; }
-.gmail-connect-description { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.oauth-connect-button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); cursor: pointer; text-align: left; }
+.oauth-connect-button:hover { background: var(--surface-hover); }
+.oauth-connect-button:disabled { opacity: .55; cursor: default; }
+.oauth-connect-button span:nth-child(2) { min-width: 0; flex: 1; }
+.oauth-connect-button strong, .oauth-connect-button small { display: block; }
+.oauth-connect-button small { margin-top: 2px; color: var(--muted); font-size: 10px; font-weight: 400; }
+.oauth-mark { display: grid; place-items: center; flex: 0 0 auto; width: 32px; height: 32px; border-radius: 8px; background: var(--text); color: var(--bg); font-size: 14px; font-weight: 700; }
+.integration-description { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .advanced-toggle { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; padding: 0; border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 11px; }
 .advanced-toggle svg.expanded { transform: rotate(180deg); }
 .advanced-content { display: flex; flex-direction: column; gap: 8px; }
@@ -520,9 +520,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .field { display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 11px; }
 .field span { display: flex; justify-content: space-between; }
 .field small { color: var(--faint); }
-.field input, .field select, .field textarea, .gmail-search-row input { width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; outline: 0; background: var(--bg); color: var(--text); }
+.field input, .field select, .field textarea, .settings-search-row input { width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; outline: 0; background: var(--bg); color: var(--text); }
 .field textarea { min-height: 84px; resize: vertical; line-height: 1.45; }
-.field input:focus, .field select:focus, .field textarea:focus, .gmail-search-row input:focus { border-color: var(--accent); }
+.field input:focus, .field select:focus, .field textarea:focus, .settings-search-row input:focus { border-color: var(--accent); }
 .field-grid { display: grid; gap: 11px; }
 .field-grid.two-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .inline-field { display: flex; gap: 8px; }
@@ -556,16 +556,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .connected-badge, .muted-badge { margin-left: auto; padding: 4px 7px; border-radius: 999px; font-size: 9px; }
 .connected-badge { background: var(--accent-soft); color: var(--accent); }
 .muted-badge { background: var(--surface-soft); color: var(--muted); }
-.gmail-search-row { display: flex; gap: 7px; }
-.gmail-search-row input { min-width: 0; flex: 1; }
-.gmail-results { display: flex; flex-direction: column; border-top: 1px solid var(--border); }
-.gmail-results > div { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--border); }
-.gmail-results > div > div { min-width: 0; flex: 1; }
-.gmail-results strong, .gmail-results small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gmail-results strong { font-size: 11px; }
-.gmail-results small { margin-top: 2px; color: var(--muted); font-size: 9px; }
-.gmail-results button { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 9px; }
-.gmail-results button:hover { color: var(--text); }
+.settings-search-row { display: flex; gap: 7px; }
+.settings-search-row input { min-width: 0; flex: 1; }
 .unread-dot, .read-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
 .read-dot { background: var(--faint); }
 .text-button { align-self: flex-start; padding: 0; border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 10px; }
