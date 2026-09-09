@@ -32,7 +32,7 @@ async function main() {
     if (request.url === '/v1/chat/completions') {
       let body = ''
       request.on('data', (chunk) => { body += chunk })
-      request.on('end', () => {
+      request.on('end', async () => {
         const parsedBody = JSON.parse(body)
         chatBodies.push(parsedBody)
         response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' })
@@ -49,6 +49,7 @@ async function main() {
           return
         }
         response.write(`data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: 'A strukturált modell-indoklás. ' } }] })}\n\n`)
+        await new Promise((resolve) => setTimeout(resolve, 75))
         response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: '<thi' } }] })}\n\n`)
         response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'nk>Címkés gondolat.</think>Teszt ' } }] })}\n\n`)
         response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'válasz rendben.' } }] })}\n\n`)
@@ -177,8 +178,28 @@ async function main() {
     await webSettings.locator('.success-text').waitFor()
     await webSettings.locator('select').selectOption('browser')
     await window.waitForFunction(async () => (await window.loclm.state.load()).settings.web.provider === 'browser')
+    await window.waitForFunction(async () => (await window.loclm.state.load()).settings.model.modelId === 'loclm-test-model')
     if (screenshotDir) await window.screenshot({ path: path.join(screenshotDir, 'web-search-settings.png') })
     await window.locator('.settings-header .icon-button').click()
+
+    await window.waitForTimeout(500)
+    await window.evaluate(async () => {
+      const loaded = await window.loclm.state.load()
+      const project = loaded.projects.find((item) => item.id === loaded.activeProjectId)
+      if (!project) throw new Error('Active project missing while preparing project-file smoke data.')
+      project.files = [...project.files.filter((file) => file.id !== 'smoke-project-file'), {
+        id: 'smoke-project-file',
+        name: 'project-note.txt',
+        mimeType: 'text/plain',
+        size: 47,
+        extractedText: 'PROJECT FILE FACT: the verification code is LIME-42.'
+      }]
+      project.learningGames = project.learningGames.map((game) => ({ ...game, model: { ...loaded.settings.model, source: 'local' } }))
+      await window.loclm.state.save(loaded)
+    })
+    await window.reload()
+    await window.waitForSelector('.app-shell')
+    await window.waitForFunction(() => document.querySelector('.composer-note')?.textContent?.includes('1 project file'))
 
     await window.click('[aria-label="Learning"]')
     if (!(await window.locator('.learn-content input').count())) {
@@ -187,10 +208,16 @@ async function main() {
     await window.locator('.learn-content input').first().waitFor()
     await window.locator('.learn-content input').first().fill('Smoke quiz')
     await window.locator('.learn-content input[type="number"]').first().fill('2')
-    await window.locator('.learn-header-actions [aria-label="Chat model"]').click()
-    await window.locator('#chat-model-menu [role="option"]').filter({ hasText: 'loclm-test-model' }).click()
+    try {
+      await window.waitForFunction(() => document.querySelector('.learn-header-actions [aria-label="Chat model"]')?.textContent?.includes('loclm-test-model'))
+    } catch (error) {
+      throw new Error(`The learning model did not restore after reload. UI: ${(await window.locator('body').innerText()).slice(0, 1600)}. ${error.message}`)
+    }
     await window.getByRole('button', { name: 'Generate with AI' }).click()
     await window.waitForFunction(() => document.querySelectorAll('.learn-preview-item').length === 2)
+    if (!chatBodies.some((entry) => JSON.stringify(entry.messages).includes('Create exactly') && JSON.stringify(entry.messages).includes('PROJECT FILE FACT'))) {
+      throw new Error('Project files were not included in learning-game generation.')
+    }
     await window.getByRole('button', { name: 'Start' }).click()
     await window.locator('.learn-option').nth(0).click()
     await window.getByRole('button', { name: 'Next' }).click()
@@ -201,6 +228,8 @@ async function main() {
     if (await window.getByText('Correct answer', { exact: true }).count() !== 2) throw new Error('Correct answers are missing from the learning result.')
     if (screenshotDir) await window.screenshot({ path: path.join(screenshotDir, 'learning-results.png') })
     await window.locator('[aria-label="Chats"]').click()
+    await window.locator('.composer .tool-button').filter({ hasText: 'Web' }).click()
+    await window.waitForFunction(() => [...document.querySelectorAll('.composer .tool-button')].some((button) => button.textContent?.includes('Web') && button.classList.contains('active')))
 
     const modelPicker = window.locator('[aria-label="Chat model"]')
     await modelPicker.waitFor()
@@ -243,6 +272,10 @@ async function main() {
     if (!systemContext.includes('https://example.com/browser-fresh') || !systemContext.includes('Current fact from the background browser & verified.')) {
       throw new Error(`A webes találat nem került a modell kontextusába: ${systemContext.slice(-500)}`)
     }
+    if (!chatBodies.some((entry) => {
+      const serialized = JSON.stringify(entry.messages)
+      return serialized.includes('Mondj egy rövid tesztet') && serialized.includes('PROJECT FILE FACT')
+    })) throw new Error('Project files were not included in the local chat model request.')
 
     const captureWindowPromise = electronApp.waitForEvent('window')
     await window.locator('.composer .tool-button').filter({ hasText: 'Capture' }).click()
@@ -258,8 +291,8 @@ async function main() {
     await window.waitForFunction(() => document.querySelectorAll('.message.user').length >= 2, undefined, { timeout: 15_000 })
     await window.locator('[aria-label="Project files"]').click()
     await window.waitForSelector('.files-main .file-card')
-    const projectFileName = await window.locator('.file-card-body strong').first().textContent()
-    if (!projectFileName?.includes('Screenshot')) throw new Error('The screenshot was not added to the project folder.')
+    const projectFileNames = await window.locator('.file-card-body strong').allTextContents()
+    if (!projectFileNames.some((name) => name.includes('Screenshot'))) throw new Error('The screenshot was not added to the project folder.')
     if (screenshotDir) await window.screenshot({ path: path.join(screenshotDir, 'project-files-populated.png') })
 
     console.log('LocLM Electron smoke test: PASS')

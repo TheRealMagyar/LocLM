@@ -158,7 +158,11 @@ export default function ChatView(props: ChatViewProps): React.JSX.Element {
             <button className="send-button" type="submit" aria-label={t('send')} disabled={!canSend}><ArrowUp size={16} /></button>
           </div>
         </div>
-        <div className="composer-note">{props.queueCount > 0 ? t('queueCount', { count: props.queueCount }) : t('pluginPermissionNote')}</div>
+        <div className="composer-note">
+          {props.queueCount > 0
+            ? t('queueCount', { count: props.queueCount })
+            : [props.project?.files.length ? t('projectFilesAiContext', { count: props.project.files.length }) : '', t('pluginPermissionNote')].filter(Boolean).join(' · ')}
+        </div>
       </form>
     </main>
   )

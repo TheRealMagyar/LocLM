@@ -143,6 +143,7 @@ const en = {
   projectFiles: 'Project files',
   projectFilesCount: '{count} file(s)',
   projectFilesAvailable: '{size} · available in every chat in this project',
+  projectFilesAiContext: '{count} project file(s) automatically available to the selected AI',
   searchFile: 'Search files',
   projectFileSearch: 'Search project files',
   emptyProjectFolder: 'This project folder is empty',
@@ -172,7 +173,7 @@ const en = {
   grokSessionNote: 'An existing Grok CLI login on this computer is reused automatically.',
   disconnectGrok: 'Sign out of Grok',
   grokSignOutNote: 'This also signs out the Grok CLI session on this computer.',
-  grokDataNote: 'This chat uses your Grok subscription. Prompts and attachments are sent to xAI.',
+  grokDataNote: 'This chat uses your Grok subscription. Prompts, attachments, and project files used as context are sent to xAI.',
   selectGrokModel: 'Select a Grok model',
   screenCapture: 'Capture',
   updates: 'Updates',
@@ -326,7 +327,9 @@ const hu: Record<TranslationKey, string> = {
   correctResult: 'Helyes',
   incorrectResult: 'Átnézendő',
   missingJustification: 'A feladat indoklást kért, de nem adtál meg indoklást.',
-  writtenEvaluationUnavailable: 'Az írásos indoklást nem sikerült ellenőrizni, ezért a tárgyi választ helyben pontoztam.'
+  writtenEvaluationUnavailable: 'Az írásos indoklást nem sikerült ellenőrizni, ezért a tárgyi választ helyben pontoztam.',
+  projectFilesAiContext: '{count} projektfájl automatikusan elérhető a kiválasztott AI számára',
+  grokDataNote: 'Ez a chat a Grok előfizetésedet használja. A promptok, csatolmányok és kontextusként használt projektfájlok az xAI-hoz kerülnek.'
 }
 
 const dictionaries: Record<AppLanguage, Record<TranslationKey, string>> = { en, hu }

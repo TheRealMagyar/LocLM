@@ -5,7 +5,7 @@ LocLM is a local-first, Electron + React + Vite AI management app. It offers cha
 ## Main features
 
 - Projects that can be created, renamed, and deleted, each with its own chat history.
-- Searchable project folder for images and documents, with open and show-in-folder actions.
+- Searchable project folder for images and documents, with open and show-in-folder actions; project files are automatically available as context to local and Grok models.
 - LM Studio and other OpenAI-compatible local endpoints, plus Grok subscriptions through Grok CLI authentication.
 - Streaming model responses and the ability to stop generation.
 - Collapsible, live thinking workflow; separate display of `reasoning_content` and `<think>` blocks published by reasoning models.

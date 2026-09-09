@@ -120,6 +120,7 @@ export default function LearningView(props: LearningViewProps): React.JSX.Elemen
       return
     }
     const plan = generationPlan(model, game.targetCount, game.type)
+    const generationReferences = dedupeFiles([...(props.project?.files ?? []), ...game.references])
     setBusy(true)
     const collected: LearningItem[] = []
     try {
@@ -137,7 +138,7 @@ export default function LearningView(props: LearningViewProps): React.JSX.Elemen
           messages: [{
             id: crypto.randomUUID(),
             role: 'user',
-            content: generationUserPrompt({ ...game, name: game.name || t('newLearningGame') }, props.language, {
+            content: generationUserPrompt({ ...game, name: game.name || t('newLearningGame'), references: generationReferences }, props.language, {
               count: batch,
               compact: plan.compact,
               maxReferenceChars: plan.maxReferenceChars
@@ -416,6 +417,7 @@ export default function LearningView(props: LearningViewProps): React.JSX.Elemen
             <button className="secondary-button" type="button" disabled={busy} onClick={() => void addReferences()}><Plus size={14} /> {t('addReference')}</button>
           </div>
           <p className="muted-text">{t('referenceMaterialHint')}</p>
+          {props.project?.files.length ? <p className="learn-project-context">{t('projectFilesAiContext', { count: props.project.files.length })}</p> : null}
           {game.references.length ? (
             <ul className="learn-file-list">
               {game.references.map((file) => (
