@@ -6,7 +6,7 @@ LocLM is a local-first, Electron + React + Vite AI management app. It offers cha
 
 - Projects that can be created, renamed, and deleted, each with its own chat history.
 - Searchable project folder for images and documents, with open and show-in-folder actions.
-- LM Studio and other OpenAI-compatible local endpoints.
+- LM Studio and other OpenAI-compatible local endpoints, plus Grok subscriptions through Grok CLI authentication.
 - Streaming model responses and the ability to stop generation.
 - Collapsible, live thinking workflow; separate display of `reasoning_content` and `<think>` blocks published by reasoning models.
 - Global, remappable screenshot shortcut (`Ctrl+Shift+S`).
@@ -45,6 +45,17 @@ Automated Electron smoke test:
 ```bash
 pnpm test:smoke
 ```
+
+## Grok subscription
+
+LocLM uses the same session as Grok CLI (`~/.grok/auth.json`). With a SuperGrok or X Premium+ account, you can chat without an API key.
+
+1. Open Settings → AI and select **Grok** as the provider.
+2. If you are already signed in through `grok login`, LocLM detects the session automatically.
+3. Otherwise, press **Sign in with Grok** and complete sign-in in your system browser.
+4. Test the connection, then select one of the listed Grok models, such as `grok-4.6`.
+
+Messages sent through the Grok provider use xAI's Grok CLI proxy (`cli-chat-proxy.grok.com`), while local models continue to use the configured OpenAI-compatible endpoint.
 
 ## LM Studio setup
 

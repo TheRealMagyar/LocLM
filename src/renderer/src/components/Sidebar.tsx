@@ -1,27 +1,34 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Blocks, ChevronDown, FolderOpen, MessageSquare, MoreHorizontal, Pencil, Plus, Search, Settings2, Trash2 } from 'lucide-react'
+import { Blocks, BookOpen, ChevronDown, FolderOpen, MessageSquare, Pencil, Plus, Search, Settings2, Trash2 } from 'lucide-react'
 import BrandLogo from './BrandLogo'
 import { getTranslator, localeFor } from '../i18n'
-import type { AppLanguage, Chat, Project } from '@shared/types'
+import type { AppLanguage, Chat, LearningGame, Project } from '@shared/types'
 
 interface SidebarProps {
   projects: Project[]
   chats: Chat[]
+  games: LearningGame[]
   activeProjectId: string
   activeChatId: string
+  activeGameId?: string
   modelLabel: string
-  activeView: 'chat' | 'files'
+  runningByChat?: Record<string, string>
+  activeView: 'chat' | 'files' | 'learn'
   language: AppLanguage
   onSelectProject: (id: string) => void
   onSelectChat: (id: string) => void
+  onSelectGame: (id: string) => void
   onNewProject: () => void
   onNewChat: () => void
+  onNewGame: () => void
   onOpenSettings: (tab?: string) => void
   onDeleteChat: (id: string) => void
+  onDeleteGame: (id: string) => void
   onRenameProject: (project: Project) => void
   onDeleteProject: (project: Project) => void
   onOpenChat: () => void
   onOpenFiles: () => void
+  onOpenLearning: () => void
   onAddProjectFiles: () => void
 }
 
@@ -35,6 +42,9 @@ export default function Sidebar(props: SidebarProps): React.JSX.Element {
   const projectChats = useMemo(() => props.chats
     .filter((chat) => chat.projectId === props.activeProjectId && chat.title.toLocaleLowerCase(locale).includes(query.toLocaleLowerCase(locale)))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), [locale, props.activeProjectId, props.chats, query])
+  const visibleGames = useMemo(() => props.games
+    .filter((game) => (game.name || t('newLearningGame')).toLocaleLowerCase(locale).includes(query.toLocaleLowerCase(locale)))
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), [locale, props.games, query, t])
 
   useEffect(() => {
     if (!projectMenuOpen) return
@@ -61,6 +71,8 @@ export default function Sidebar(props: SidebarProps): React.JSX.Element {
         <button className={`rail-button ${props.activeView === 'chat' ? 'active' : ''}`} type="button" aria-label={t('chats')} onClick={props.onOpenChat}><MessageSquare size={17} /></button>
         <button className="rail-button" type="button" aria-label={t('plugins')} onClick={() => props.onOpenSettings('plugins')}><Blocks size={17} /></button>
         <button className={`rail-button ${props.activeView === 'files' ? 'active' : ''}`} type="button" aria-label={t('projectFiles')} onClick={props.onOpenFiles}><FolderOpen size={17} /></button>
+        <span className="rail-separator" />
+        <button className={`rail-button ${props.activeView === 'learn' ? 'active' : ''}`} type="button" aria-label={t('learning')} onClick={props.onOpenLearning}><BookOpen size={17} /></button>
         <button className="rail-button rail-bottom" type="button" aria-label={t('settings')} onClick={() => props.onOpenSettings()}><Settings2 size={17} /></button>
       </aside>
 
@@ -91,31 +103,59 @@ export default function Sidebar(props: SidebarProps): React.JSX.Element {
           )}
         </div>
 
-        {props.activeView === 'chat'
-          ? <button className="new-chat-button" type="button" onClick={props.onNewChat}><Plus size={16} /> {t('newChat')}</button>
-          : <button className="new-chat-button" type="button" onClick={props.onAddProjectFiles}><Plus size={16} /> {t('addFile')}</button>}
+        {props.activeView === 'learn'
+          ? <button className="new-chat-button" type="button" onClick={props.onNewGame}><Plus size={16} /> {t('newLearningGame')}</button>
+          : props.activeView === 'chat'
+            ? <button className="new-chat-button" type="button" onClick={props.onNewChat}><Plus size={16} /> {t('newChat')}</button>
+            : <button className="new-chat-button" type="button" onClick={props.onAddProjectFiles}><Plus size={16} /> {t('addFile')}</button>}
 
         <label className="sidebar-search">
           <Search size={14} />
-          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('searchChats')} aria-label={t('searchChats')} />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={props.activeView === 'learn' ? t('searchGames') : t('searchChats')}
+            aria-label={props.activeView === 'learn' ? t('searchGames') : t('searchChats')}
+          />
         </label>
 
-        <div className="sidebar-section-label">{props.activeView === 'chat' ? t('conversations') : t('projectChats')}</div>
-        <nav className="chat-nav" aria-label={t('conversations')}>
-          {projectChats.map((chat) => (
-            <div className={`chat-nav-row ${chat.id === props.activeChatId ? 'active' : ''}`} key={chat.id}>
-              <button type="button" onClick={() => props.onSelectChat(chat.id)}>
-                <MessageSquare size={14} />
-                <span>{chat.title}</span>
-              </button>
-              <button className="chat-row-menu" type="button" aria-label={`${t('delete')}: ${chat.title}`} onClick={() => props.onDeleteChat(chat.id)}><MoreHorizontal size={14} /></button>
-            </div>
-          ))}
-        </nav>
+        <div className="sidebar-section-label">{props.activeView === 'learn' ? t('learningGames') : props.activeView === 'chat' ? t('conversations') : t('projectChats')}</div>
+        {props.activeView === 'learn' ? (
+          <nav className="chat-nav" aria-label={t('learningGames')}>
+            {visibleGames.map((game) => (
+              <div className={`chat-nav-row ${game.id === props.activeGameId ? 'active' : ''}`} key={game.id}>
+                <button type="button" onClick={() => props.onSelectGame(game.id)}>
+                  <BookOpen size={14} />
+                  <span className="chat-nav-copy">
+                    <span>{game.name || t('newLearningGame')}</span>
+                    <small>{game.items.length ? t('generatedPreview', { count: game.items.length }) : t(game.type === 'fill-blank' ? 'fillBlankType' : game.type === 'match' ? 'matchType' : game.type === 'exam' ? 'examType' : 'quizType')}</small>
+                  </span>
+                </button>
+                <button className="chat-row-menu" type="button" aria-label={`${t('delete')}: ${game.name || t('newLearningGame')}`} onClick={() => props.onDeleteGame(game.id)}><Trash2 size={14} /></button>
+              </div>
+            ))}
+          </nav>
+        ) : (
+          <nav className="chat-nav" aria-label={t('conversations')}>
+            {projectChats.map((chat) => (
+              <div className={`chat-nav-row ${chat.id === props.activeChatId ? 'active' : ''} ${props.runningByChat?.[chat.id] ? 'running' : ''}`} key={chat.id}>
+                <button type="button" onClick={() => props.onSelectChat(chat.id)}>
+                  <MessageSquare size={14} />
+                  <span className="chat-nav-copy">
+                    <span>{chat.title}</span>
+                    {props.runningByChat?.[chat.id] ? <small>{props.runningByChat[chat.id]}</small> : null}
+                  </span>
+                </button>
+                <button className="chat-row-menu" type="button" aria-label={`${t('delete')}: ${chat.title}`} onClick={() => props.onDeleteChat(chat.id)}><Trash2 size={14} /></button>
+              </div>
+            ))}
+          </nav>
+        )}
 
         <div className="sidebar-runtime">
-          <span className="status-dot" />
-          <span>{props.modelLabel || t('noModel')}</span>
+          <span className={`status-dot ${props.runningByChat?.[props.activeChatId] ? 'busy' : ''}`} />
+          <span>{props.runningByChat?.[props.activeChatId] ? t('runningModel', { model: props.runningByChat[props.activeChatId] }) : (props.modelLabel || t('noModel'))}</span>
         </div>
       </aside>
     </>

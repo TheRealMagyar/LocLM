@@ -8,6 +8,8 @@ import { DocumentService } from './document-service'
 import { GmailService } from './gmail-service'
 import { UpdaterService } from './updater-service'
 import { WebSearchService } from './web-service'
+import { GrokService } from './grok-service'
+import { activeModelProfile } from '../shared/model'
 import type { AppLanguage, CaptureSelection, ChatRequest, ModelProfile, PersistedState, SecretSettings, WebSettings } from '../shared/types'
 
 if (process.env.LOCLM_USER_DATA_DIR) app.setPath('userData', process.env.LOCLM_USER_DATA_DIR)
@@ -23,6 +25,7 @@ const aiService = new AiService()
 const documentService = new DocumentService()
 const webService = new WebSearchService()
 const gmailService = new GmailService(vault, import.meta.env.MAIN_VITE_GOOGLE_CLIENT_ID ?? '')
+const grokService = new GrokService()
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -74,12 +77,38 @@ function registerIpc(): void {
   ipcMain.handle('secrets:get', () => vault.getSecrets())
   ipcMain.handle('secrets:set', (_event, secrets: SecretSettings) => vault.setSecrets(secrets))
 
-  ipcMain.handle('models:list', (_event, profile: ModelProfile) => aiService.listModels(profile, vault.getSecrets().modelApiKey))
-  ipcMain.handle('models:test', (_event, profile: ModelProfile) => aiService.testConnection(profile, vault.getSecrets().modelApiKey))
+  ipcMain.handle('models:list', async (_event, profile: ModelProfile) => {
+    try {
+      const auth = await resolveModelAuth(profile)
+      return await aiService.listModels(auth.profile, auth.apiKey, auth.extraHeaders)
+    } catch {
+      return []
+    }
+  })
+  ipcMain.handle('models:test', async (_event, profile: ModelProfile) => {
+    const auth = await resolveModelAuth(profile)
+    return aiService.testConnection(auth.profile, auth.apiKey, auth.extraHeaders)
+  })
   ipcMain.on('ai:chat:start', (event, request: ChatRequest) => {
-    void aiService.startChat({ ...request, apiKey: vault.getSecrets().modelApiKey }, event.sender)
+    void (async () => {
+      try {
+        const auth = await resolveModelAuth(request.model)
+        await aiService.startChat({ ...request, model: auth.profile, apiKey: auth.apiKey }, event.sender, auth.extraHeaders)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Ismeretlen modellhiba.'
+        if (!event.sender.isDestroyed()) event.sender.send('ai:chat:event', { requestId: request.requestId, type: 'error', error: message })
+      }
+    })()
   })
   ipcMain.on('ai:chat:abort', (_event, requestId: string) => aiService.abort(requestId))
+  ipcMain.handle('models:complete', async (_event, request: ChatRequest) => {
+    try {
+      const auth = await resolveModelAuth(request.model)
+      return await aiService.complete({ ...request, model: auth.profile, apiKey: auth.apiKey }, auth.extraHeaders)
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : String(error))
+    }
+  })
 
   ipcMain.handle('files:pick', async () => {
     const result = await dialog.showOpenDialog({
@@ -125,6 +154,15 @@ function registerIpc(): void {
   ipcMain.handle('gmail:send-draft', (_event, draftId: string) => gmailService.sendDraft(draftId))
   ipcMain.handle('gmail:modify-thread', (_event, threadId: string, addLabelIds: string[], removeLabelIds: string[]) => gmailService.modifyThread(threadId, addLabelIds, removeLabelIds))
 
+  ipcMain.handle('grok:status', () => grokService.status())
+  ipcMain.handle('grok:connect', async () => {
+    const status = await grokService.connect()
+    mainWindow?.show()
+    mainWindow?.focus()
+    return status
+  })
+  ipcMain.handle('grok:disconnect', () => grokService.disconnect())
+
   ipcMain.handle('web:search', (_event, query: string, settings: WebSettings, language: AppLanguage) => webService.search(query, settings, vault.getSecrets().braveApiKey, language))
   ipcMain.handle('web:open-external', async (_event, url: string) => {
     if (!/^https?:\/\//i.test(url)) throw new Error('Csak HTTP(S) link nyitható meg.')
@@ -144,6 +182,18 @@ function registerIpc(): void {
   })
   ipcMain.on('window:close', (event) => BrowserWindow.fromWebContents(event.sender)?.close())
   ipcMain.handle('window:is-maximized', (event) => BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false)
+}
+
+async function resolveModelAuth(profile: ModelProfile): Promise<{ profile: ModelProfile; apiKey?: string; extraHeaders?: Record<string, string> }> {
+  const resolved = profile.source ? profile : activeModelProfile(store.getState().settings)
+  if (resolved.source === 'grok') {
+    return {
+      profile: { ...resolved, providerName: 'Grok', baseUrl: grokService.baseUrl, source: 'grok' },
+      apiKey: await grokService.getAccessToken(),
+      extraHeaders: grokService.identityHeaders()
+    }
+  }
+  return { profile: { ...resolved, source: 'local' }, apiKey: vault.getSecrets().modelApiKey }
 }
 
 function attachmentPath(filePath: string): string {

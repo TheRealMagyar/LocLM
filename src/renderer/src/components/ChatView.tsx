@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm'
 import type { Attachment, Chat, Project } from '@shared/types'
 import BrandLogo from './BrandLogo'
 import AssistantInsights from './AssistantInsights'
+import ModelPicker, { type ChatModelOption } from './ModelPicker'
 import { getTranslator } from '../i18n'
 import type { AppLanguage } from '@shared/types'
 
@@ -16,7 +17,11 @@ interface ChatViewProps {
   webEnabled: boolean
   gmailEnabled: boolean
   generating: boolean
+  queueCount: number
   language: AppLanguage
+  modelLabel?: string
+  modelOptions: ChatModelOption[]
+  selectedModelKey: string
   onPromptChange: (value: string) => void
   onSend: () => void
   onAttach: () => void
@@ -27,6 +32,8 @@ interface ChatViewProps {
   onAbort: () => void
   onOpenSettings: () => void
   onExport: (title: string, content: string, format: 'docx' | 'pdf') => void
+  onModelChange: (key: string) => void
+  onRemoveQueued: (messageId: string) => void
 }
 
 export default function ChatView(props: ChatViewProps): React.JSX.Element {
@@ -41,6 +48,8 @@ export default function ChatView(props: ChatViewProps): React.JSX.Element {
     props.onSend()
   }
 
+  const canSend = Boolean(props.prompt.trim() || props.attachments.length)
+
   return (
     <main className="chat-main">
       <header className="chat-header">
@@ -48,9 +57,16 @@ export default function ChatView(props: ChatViewProps): React.JSX.Element {
           <strong>{props.chat?.title ?? t('newConversation')}</strong>
           <span>{props.project?.name ?? t('chatProjectFallback')}</span>
         </div>
-        <button className="runtime-chip" type="button" onClick={props.onOpenSettings}>
-          <span className="status-dot" /> {props.project?.defaultModelId || 'Helyi modell'}
-        </button>
+        <div className="chat-runtime">
+          <ModelPicker
+            language={props.language}
+            options={props.modelOptions}
+            selectedKey={props.selectedModelKey}
+            selectedLabel={props.modelLabel || t('noModel')}
+            generating={props.generating}
+            onChange={props.onModelChange}
+          />
+        </div>
       </header>
 
       <section className="messages" aria-live="polite">
@@ -68,9 +84,15 @@ export default function ChatView(props: ChatViewProps): React.JSX.Element {
         )}
 
         {props.chat?.messages.map((message) => (
-          <article className={`message ${message.role}`} key={message.id}>
+          <article className={`message ${message.role}${message.queued ? ' queued' : ''}`} key={message.id}>
             <div className={`message-avatar ${message.role === 'assistant' ? 'assistant' : ''}`}>{message.role === 'assistant' ? <BrandLogo size="small" /> : 'TE'}</div>
             <div className="message-body">
+              {message.queued ? (
+                <div className="queued-row">
+                  <span className="queued-badge">{t('queued')}</span>
+                  <button type="button" className="text-button" onClick={() => props.onRemoveQueued(message.id)}>{t('removeFromQueue')}</button>
+                </div>
+              ) : null}
               {message.attachments?.length ? (
                 <div className="message-attachments">
                   {message.attachments.map((attachment) => attachment.mimeType.startsWith('image/') && attachment.previewDataUrl
@@ -88,6 +110,7 @@ export default function ChatView(props: ChatViewProps): React.JSX.Element {
                 >{message.content}</ReactMarkdown>
               ) : message.status === 'streaming' ? <div className="typing-indicator"><span /><span /><span /></div> : null}
               {message.status === 'error' && <div className="message-error">{t('responseInterrupted')}</div>}
+              {message.role === 'assistant' && message.modelLabel && message.status !== 'streaming' ? <div className="message-model">{message.modelLabel}</div> : null}
               {message.role === 'assistant' && message.status === 'complete' && message.content && (
                 <div className="message-actions">
                   <button type="button" onClick={() => props.onExport(props.chat?.title ?? t('loclmResponse'), message.content, 'docx')}>Word</button>
@@ -131,12 +154,11 @@ export default function ChatView(props: ChatViewProps): React.JSX.Element {
             <button className="tool-button" type="button" onClick={props.onCapture}><Camera size={15} /> {t('capture')}</button>
             <button className={`tool-button ${props.webEnabled ? 'active' : ''}`} type="button" aria-pressed={props.webEnabled} onClick={props.onToggleWeb}><Globe2 size={15} /> {t('web')}</button>
             <button className={`tool-button ${props.gmailEnabled ? 'active' : ''}`} type="button" aria-pressed={props.gmailEnabled} onClick={props.onToggleGmail}><Mail size={15} /> {t('gmail')}</button>
-            {props.generating
-              ? <button className="send-button" type="button" aria-label={t('stopGeneration')} onClick={props.onAbort}><Square size={13} fill="currentColor" /></button>
-              : <button className="send-button" type="submit" aria-label={t('send')} disabled={!props.prompt.trim() && props.attachments.length === 0}><ArrowUp size={16} /></button>}
+            {props.generating ? <button className="stop-button" type="button" aria-label={t('stopGeneration')} onClick={props.onAbort}><Square size={13} fill="currentColor" /></button> : null}
+            <button className="send-button" type="submit" aria-label={t('send')} disabled={!canSend}><ArrowUp size={16} /></button>
           </div>
         </div>
-        <div className="composer-note">{t('pluginPermissionNote')}</div>
+        <div className="composer-note">{props.queueCount > 0 ? t('queueCount', { count: props.queueCount }) : t('pluginPermissionNote')}</div>
       </form>
     </main>
   )

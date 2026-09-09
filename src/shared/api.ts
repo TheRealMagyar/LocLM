@@ -11,6 +11,7 @@ import type {
   GmailConfiguration,
   GmailDraftInput,
   GmailThreadSummary,
+  GrokConnectionStatus,
   ModelDescriptor,
   ModelProfile,
   PersistedState,
@@ -34,6 +35,7 @@ export interface LoclmApi {
     test: (profile: ModelProfile) => Promise<{ latencyMs: number; models: ModelDescriptor[] }>
     startChat: (request: ChatRequest) => void
     abortChat: (requestId: string) => void
+    complete: (request: ChatRequest) => Promise<string>
     onEvent: (callback: (event: ChatStreamEvent) => void) => () => void
   }
   files: {
@@ -61,6 +63,11 @@ export interface LoclmApi {
     createDraft: (input: GmailDraftInput) => Promise<{ id: string }>
     sendDraft: (draftId: string) => Promise<void>
     modifyThread: (threadId: string, addLabelIds: string[], removeLabelIds: string[]) => Promise<void>
+  }
+  grok: {
+    status: () => Promise<GrokConnectionStatus>
+    connect: () => Promise<GrokConnectionStatus>
+    disconnect: () => Promise<void>
   }
   web: {
     search: (query: string, settings: WebSettings, language: AppLanguage) => Promise<WebSearchResult[]>

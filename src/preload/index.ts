@@ -15,6 +15,7 @@ const api: LoclmApi = {
     test: (profile) => ipcRenderer.invoke('models:test', profile),
     startChat: (request) => ipcRenderer.send('ai:chat:start', request),
     abortChat: (requestId) => ipcRenderer.send('ai:chat:abort', requestId),
+    complete: (request) => ipcRenderer.invoke('models:complete', request),
     onEvent: (callback) => subscribe('ai:chat:event', callback)
   },
   files: {
@@ -42,6 +43,11 @@ const api: LoclmApi = {
     createDraft: (input) => ipcRenderer.invoke('gmail:create-draft', input),
     sendDraft: (draftId) => ipcRenderer.invoke('gmail:send-draft', draftId),
     modifyThread: (threadId, addLabelIds, removeLabelIds) => ipcRenderer.invoke('gmail:modify-thread', threadId, addLabelIds, removeLabelIds)
+  },
+  grok: {
+    status: () => ipcRenderer.invoke('grok:status'),
+    connect: () => ipcRenderer.invoke('grok:connect'),
+    disconnect: () => ipcRenderer.invoke('grok:disconnect')
   },
   web: {
     search: (query, settings, language) => ipcRenderer.invoke('web:search', query, settings, language),

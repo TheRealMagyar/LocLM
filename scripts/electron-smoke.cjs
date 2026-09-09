@@ -4,6 +4,8 @@ const path = require('node:path')
 const fs = require('node:fs/promises')
 const { _electron: electron } = require('playwright-core')
 
+delete process.env.ELECTRON_RUN_AS_NODE
+
 async function main() {
   const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'loclm-smoke-'))
   const screenshotDir = process.env.LOCLM_SMOKE_SCREENSHOT_DIR
@@ -31,8 +33,21 @@ async function main() {
       let body = ''
       request.on('data', (chunk) => { body += chunk })
       request.on('end', () => {
-        chatBodies.push(JSON.parse(body))
+        const parsedBody = JSON.parse(body)
+        chatBodies.push(parsedBody)
         response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' })
+        const userContent = parsedBody.messages?.filter((message) => message.role === 'user').at(-1)?.content ?? ''
+        if (userContent.includes('Create exactly')) {
+          const learningItems = JSON.stringify({
+            items: [
+              { prompt: 'Which planet is known as the Red Planet?', options: ['Mars', 'Venus', 'Jupiter', 'Mercury'], correctIndex: 0 },
+              { prompt: 'What is the capital of France?', options: ['Berlin', 'Paris', 'Rome', 'Madrid'], correctIndex: 1 }
+            ]
+          })
+          response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: learningItems } }] })}\n\n`)
+          response.end('data: [DONE]\n\n')
+          return
+        }
         response.write(`data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: 'A strukturált modell-indoklás. ' } }] })}\n\n`)
         response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: '<thi' } }] })}\n\n`)
         response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'nk>Címkés gondolat.</think>Teszt ' } }] })}\n\n`)
@@ -57,6 +72,7 @@ async function main() {
       env: {
         ...process.env,
         LOCLM_USER_DATA_DIR: userDataDir,
+        GROK_HOME: path.join(userDataDir, 'grok-home'),
         LOCLM_BROWSER_SEARCH_URL_TEMPLATE: 'http://127.0.0.1:12345/browser-search?q={query}&language={language}'
       }
     })
@@ -102,6 +118,28 @@ async function main() {
     await window.locator('[aria-label="Project files"]').click()
     await window.waitForSelector('.files-main .files-empty')
     if (screenshotDir) await window.screenshot({ path: path.join(screenshotDir, 'project-files.png') })
+    await window.click('[aria-label="Learning"]')
+    await window.waitForSelector('.learn-main')
+    await window.waitForFunction(() => document.querySelector('.learn-main h1')?.textContent === 'No learning games yet')
+    await window.locator('.learn-main .primary-button, .learn-main .secondary-button').filter({ hasText: 'New game' }).first().click()
+    await window.waitForFunction(() => document.querySelector('.learn-type-grid'))
+    if (await window.locator('.learn-content input').first().inputValue()) throw new Error('A new learning game should start with an empty name field.')
+    const learningHeader = await window.locator('.learn-edit-header').boundingBox()
+    const deleteGameButton = await window.locator('[aria-label="Delete game"]').boundingBox()
+    if (!learningHeader || !deleteGameButton || deleteGameButton.y + deleteGameButton.height > learningHeader.y + learningHeader.height + 1) {
+      throw new Error('The learning game delete button wrapped outside the header.')
+    }
+    if (screenshotDir) await window.screenshot({ path: path.join(screenshotDir, 'learning.png') })
+    let deleteDialogMessage = ''
+    await Promise.all([
+      window.waitForEvent('dialog').then(async (dialog) => {
+        deleteDialogMessage = dialog.message()
+        await dialog.dismiss()
+      }),
+      window.locator('[aria-label="Delete game"]').click()
+    ])
+    if (deleteDialogMessage !== 'Delete this learning game?') throw new Error('The learning game deletion confirmation is missing or incorrect.')
+    await window.waitForSelector('.learn-type-grid')
     await window.locator('[aria-label="Chats"]').click()
     await window.waitForSelector('.chat-main .composer')
 
@@ -118,6 +156,11 @@ async function main() {
 
     await window.click('[aria-label="Settings"]')
     if (screenshotDir) await window.screenshot({ path: path.join(screenshotDir, 'settings.png') })
+    await window.getByRole('tab', { name: 'Grok' }).click()
+    await window.waitForFunction(() => [...document.querySelectorAll('.source-toggle button')].some((button) => button.getAttribute('aria-selected') === 'true' && button.textContent?.includes('Grok')))
+    if (!(await window.locator('.oauth-connect-button, .connected-badge').count())) throw new Error('The Grok sign-in UI did not appear.')
+    await window.getByRole('tab', { name: 'Local AI' }).click()
+    await window.waitForFunction(() => [...document.querySelectorAll('.source-toggle button')].some((button) => button.getAttribute('aria-selected') === 'true' && button.textContent?.includes('Local AI')))
     await window.locator('input[placeholder="http://127.0.0.1:1234/v1"]').fill('http://127.0.0.1:12345/v1')
     await window.locator('input[placeholder="Model ID"]').fill('loclm-test-model')
     await window.getByRole('tab', { name: 'Plugins' }).click()
@@ -136,6 +179,36 @@ async function main() {
     await window.waitForFunction(async () => (await window.loclm.state.load()).settings.web.provider === 'browser')
     if (screenshotDir) await window.screenshot({ path: path.join(screenshotDir, 'web-search-settings.png') })
     await window.locator('.settings-header .icon-button').click()
+
+    await window.click('[aria-label="Learning"]')
+    if (!(await window.locator('.learn-content input').count())) {
+      await window.locator('.learn-main .primary-button, .learn-main .secondary-button').filter({ hasText: 'New game' }).first().click()
+    }
+    await window.locator('.learn-content input').first().waitFor()
+    await window.locator('.learn-content input').first().fill('Smoke quiz')
+    await window.locator('.learn-content input[type="number"]').first().fill('2')
+    await window.locator('.learn-header-actions [aria-label="Chat model"]').click()
+    await window.locator('#chat-model-menu [role="option"]').filter({ hasText: 'loclm-test-model' }).click()
+    await window.getByRole('button', { name: 'Generate with AI' }).click()
+    await window.waitForFunction(() => document.querySelectorAll('.learn-preview-item').length === 2)
+    await window.getByRole('button', { name: 'Start' }).click()
+    await window.locator('.learn-option').nth(0).click()
+    await window.getByRole('button', { name: 'Next' }).click()
+    await window.locator('.learn-option').nth(0).click()
+    await window.getByRole('button', { name: 'Finish and evaluate' }).click()
+    await window.waitForFunction(() => document.querySelector('.learn-score strong')?.textContent?.includes('1/2 points · 50%'))
+    if (await window.locator('.learn-review-card').count() !== 2) throw new Error('The learning result did not list every task.')
+    if (await window.getByText('Correct answer', { exact: true }).count() !== 2) throw new Error('Correct answers are missing from the learning result.')
+    if (screenshotDir) await window.screenshot({ path: path.join(screenshotDir, 'learning-results.png') })
+    await window.locator('[aria-label="Chats"]').click()
+
+    const modelPicker = window.locator('[aria-label="Chat model"]')
+    await modelPicker.waitFor()
+    if (!(await modelPicker.textContent())?.includes('loclm-test-model')) throw new Error('The chat model picker did not keep the selected local model.')
+    await modelPicker.click()
+    await window.waitForSelector('#chat-model-menu')
+    await window.locator('#chat-model-menu [role="option"]').filter({ hasText: 'loclm-test-model' }).click()
+    await window.waitForFunction(() => !document.querySelector('#chat-model-menu'))
 
     await window.locator('.composer textarea').fill('Mondj egy rövid tesztet')
     await window.locator('.send-button').click()
@@ -164,7 +237,9 @@ async function main() {
       const assistant = loaded.chats.flatMap((chat) => chat.messages).findLast((message) => message.role === 'assistant')
       return assistant?.reasoning?.includes('Címkés gondolat.') && assistant.sources?.some((source) => source.url === 'https://example.com/browser-fresh')
     })
-    const systemContext = chatBodies[0]?.messages?.find((message) => message.role === 'system')?.content ?? ''
+    const systemContext = chatBodies
+      .map((entry) => entry.messages?.find((message) => message.role === 'system')?.content ?? '')
+      .find((content) => content.includes('https://example.com/browser-fresh')) ?? ''
     if (!systemContext.includes('https://example.com/browser-fresh') || !systemContext.includes('Current fact from the background browser & verified.')) {
       throw new Error(`A webes találat nem került a modell kontextusába: ${systemContext.slice(-500)}`)
     }

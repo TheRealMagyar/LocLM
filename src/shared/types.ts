@@ -22,6 +22,9 @@ export interface ChatMessage {
   reasoning?: string
   sources?: WebSearchResult[]
   activity?: AiActivityStep[]
+  queued?: boolean
+  modelId?: string
+  modelLabel?: string
 }
 
 export type AiActivityType = 'web-search' | 'gmail-search' | 'generating'
@@ -41,6 +44,7 @@ export interface Chat {
   createdAt: string
   updatedAt: string
   messages: ChatMessage[]
+  model?: ModelProfile
 }
 
 export interface Project {
@@ -52,13 +56,78 @@ export interface Project {
   systemPrompt: string
   enabledPlugins: PluginId[]
   files: Attachment[]
+  learningGames: LearningGame[]
+}
+
+export type LearningGameType = 'quiz' | 'fill-blank' | 'match' | 'exam'
+
+export interface LearningPair {
+  left: string
+  right: string
+}
+
+export interface LearningItem {
+  id: string
+  type: LearningGameType
+  prompt: string
+  options?: string[]
+  correctIndex?: number
+  correctAnswers?: string[]
+  pairs?: LearningPair[]
+  requiresJustification?: boolean
+  explanation?: string
+}
+
+export interface LearningResponse {
+  itemId: string
+  selectedIndex?: number
+  text?: string
+  justification?: string
+  matches?: LearningPair[]
+  correct?: boolean
+  feedback?: string
+}
+
+export interface LearningAttempt {
+  id: string
+  startedAt: string
+  completedAt?: string
+  timedOut?: boolean
+  responses: LearningResponse[]
+  score?: number
+  maxScore?: number
+  evaluation?: string
+}
+
+export interface LearningGame {
+  id: string
+  name: string
+  type: LearningGameType
+  timed: boolean
+  timeLimitSeconds: number
+  targetCount: number
+  extraInstructions: string
+  references: Attachment[]
+  items: LearningItem[]
+  attempts: LearningAttempt[]
+  model?: ModelProfile
+  createdAt: string
+  updatedAt: string
 }
 
 export type PluginId = 'gmail' | 'web' | 'vision' | 'documents'
+export type ModelSource = 'local' | 'grok'
 
 export interface ModelProfile {
+  source?: ModelSource
   providerName: string
   baseUrl: string
+  modelId: string
+  contextLength: number
+  supportsVision: boolean
+}
+
+export interface GrokModelSettings {
   modelId: string
   contextLength: number
   supportsVision: boolean
@@ -91,7 +160,9 @@ export interface WebSettings {
 export interface AppSettings {
   language: AppLanguage
   theme: 'system' | 'light' | 'dark'
+  modelSource: ModelSource
   model: ModelProfile
+  grok: GrokModelSettings
   capture: CaptureSettings
   updates: UpdateSettings
   gmail: GmailSettings
@@ -115,6 +186,13 @@ export interface SecretSettings {
 export interface ModelDescriptor {
   id: string
   ownedBy?: string
+  name?: string
+  contextLength?: number
+}
+
+export interface GrokConnectionStatus {
+  connected: boolean
+  email?: string
 }
 
 export interface ChatRequest {
@@ -124,6 +202,9 @@ export interface ChatRequest {
   apiKey?: string
   systemPrompt: string
   messages: ChatMessage[]
+  maxTokens?: number
+  timeoutMs?: number
+  jsonComplete?: boolean
 }
 
 export interface ChatStreamEvent {

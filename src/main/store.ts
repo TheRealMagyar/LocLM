@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile, copyFile, stat } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { Attachment, PersistedState } from '../shared/types'
+import { createDefaultGrokSettings } from '../shared/model'
 
 const now = (): string => new Date().toISOString()
 
@@ -21,9 +22,10 @@ function createDefaultState(): PersistedState {
         createdAt: timestamp,
         updatedAt: timestamp,
         defaultModelId: '',
-        systemPrompt: 'You are a helpful, accurate local AI assistant. Clearly disclose when an action uses an external service.',
+        systemPrompt: 'You are a helpful, accurate AI assistant. Clearly disclose when an action uses an external service.',
         enabledPlugins: ['vision', 'documents', 'web'],
-        files: []
+        files: [],
+        learningGames: []
       }
     ],
     chats: [
@@ -39,13 +41,16 @@ function createDefaultState(): PersistedState {
     settings: {
       language: 'en',
       theme: 'system',
+      modelSource: 'local',
       model: {
+        source: 'local',
         providerName: 'LM Studio',
         baseUrl: 'http://127.0.0.1:1234/v1',
         modelId: '',
         contextLength: 8192,
         supportsVision: true
       },
+      grok: createDefaultGrokSettings(),
       capture: {
         enabled: true,
         shortcut: 'CommandOrControl+Shift+S',
@@ -101,11 +106,21 @@ export class StateStore {
           ...parsed,
           projects: parsed.projects.map((project) => ({
             ...project,
-            files: Array.isArray(project.files) ? project.files : []
+            files: Array.isArray(project.files) ? project.files : [],
+            learningGames: Array.isArray(project.learningGames) ? project.learningGames : []
           })),
           settings: {
             ...parsed.settings,
             language: parsed.settings.language === 'hu' ? 'hu' : 'en',
+            modelSource: parsed.settings.modelSource === 'grok' ? 'grok' : 'local',
+            model: {
+              source: 'local',
+              ...parsed.settings.model
+            },
+            grok: {
+              ...createDefaultGrokSettings(),
+              ...parsed.settings.grok
+            },
             web: {
               ...parsed.settings.web,
               provider: parsed.settings.web.browserEngine

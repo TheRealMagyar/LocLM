@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Check, ChevronDown, Cpu, Download, ExternalLink, FileText, Github, Globe2, Image, Mail, RefreshCw, ScanLine, Search, ShieldCheck, X } from 'lucide-react'
+import { Check, ChevronDown, Cpu, Download, ExternalLink, FileText, Github, Globe2, Image, Mail, RefreshCw, ScanLine, Search, ShieldCheck, Sparkles, X } from 'lucide-react'
 import { getTranslator, type Translate } from '../i18n'
+import { activeModelProfile } from '@shared/model'
 import type {
   AppSettings,
   GmailConfiguration,
   GmailConnectionStatus,
   GmailThreadSummary,
+  GrokConnectionStatus,
   ModelDescriptor,
   SecretSettings,
   UpdateState
@@ -17,12 +19,14 @@ interface SettingsPanelProps {
   settings: AppSettings
   secrets: SecretSettings
   gmailStatus: GmailConnectionStatus
+  grokStatus: GrokConnectionStatus
   appInfo: { version: string; platform: string }
   updateState: UpdateState
   onClose: () => void
   onSettingsChange: (settings: AppSettings) => void
   onSecretsChange: (secrets: SecretSettings) => void
   onGmailStatusChange: (status: GmailConnectionStatus) => void
+  onGrokStatusChange: (status: GrokConnectionStatus) => void
 }
 
 type SettingsTab = 'model' | 'plugins' | 'capture' | 'updates'
@@ -38,6 +42,8 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
   const [gmailConfiguration, setGmailConfiguration] = useState<GmailConfiguration>({ hasBuiltInClientId: false })
   const [gmailConnectionMessage, setGmailConnectionMessage] = useState('')
   const [gmailAdvancedOpen, setGmailAdvancedOpen] = useState(false)
+  const [grokBusy, setGrokBusy] = useState(false)
+  const [grokConnectionMessage, setGrokConnectionMessage] = useState('')
   const [shortcutStatus, setShortcutStatus] = useState('')
   const [webTestQuery, setWebTestQuery] = useState('LocLM local AI')
   const [webTestState, setWebTestState] = useState<{ status: 'idle' | 'busy' | 'success' | 'error'; message: string }>({ status: 'idle', message: '' })
@@ -50,8 +56,38 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
   }, [props.initialTab, props.open])
 
   useEffect(() => {
-    if (props.open) void window.loclm.gmail.configuration().then(setGmailConfiguration)
+    if (!props.open) return
+    void window.loclm.gmail.configuration().then(setGmailConfiguration)
+    void window.loclm.grok.status().then(props.onGrokStatusChange)
   }, [props.open])
+
+  useEffect(() => {
+    if (!props.open || tab !== 'model' || props.settings.modelSource !== 'grok' || !props.grokStatus.connected) return
+    let cancelled = false
+    setBusy(true)
+    setModelStatus(t('connecting'))
+    void window.loclm.models.test(activeModelProfile(props.settings)).then((result) => {
+      if (cancelled) return
+      setModels(result.models)
+      setModelStatus(t('availableModels', { latency: result.latencyMs, count: result.models.length }))
+      const first = result.models[0]
+      if (first && !props.settings.grok.modelId) {
+        props.onSettingsChange({
+          ...props.settings,
+          grok: {
+            ...props.settings.grok,
+            modelId: first.id,
+            contextLength: first.contextLength || props.settings.grok.contextLength
+          }
+        })
+      }
+    }).catch((error) => {
+      if (!cancelled) setModelStatus(errorMessage(error))
+    }).finally(() => {
+      if (!cancelled) setBusy(false)
+    })
+    return () => { cancelled = true }
+  }, [props.open, tab, props.settings.modelSource, props.grokStatus.connected])
 
   if (!props.open) return null
 
@@ -60,6 +96,8 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
   }
 
   const updateModel = (patch: Partial<AppSettings['model']>): void => updateSettings('model', { ...props.settings.model, ...patch })
+  const updateGrok = (patch: Partial<AppSettings['grok']>): void => updateSettings('grok', { ...props.settings.grok, ...patch })
+  const isGrok = props.settings.modelSource === 'grok'
   const updateCapture = (patch: Partial<AppSettings['capture']>): void => updateSettings('capture', { ...props.settings.capture, ...patch })
   const updateUpdates = (patch: Partial<AppSettings['updates']>): void => updateSettings('updates', { ...props.settings.updates, ...patch })
   const updateWeb = (patch: Partial<AppSettings['web']>): void => updateSettings('web', { ...props.settings.web, ...patch })
@@ -69,10 +107,16 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
     setModelStatus(t('connecting'))
     try {
       await window.loclm.secrets.set(props.secrets)
-      const result = await window.loclm.models.test(props.settings.model)
+      const profile = activeModelProfile(props.settings)
+      const result = await window.loclm.models.test(profile)
       setModels(result.models)
       setModelStatus(t('availableModels', { latency: result.latencyMs, count: result.models.length }))
-      if (!props.settings.model.modelId && result.models[0]) updateModel({ modelId: result.models[0].id })
+      const first = result.models[0]
+      if (first && isGrok && !props.settings.grok.modelId) {
+        updateGrok({ modelId: first.id, contextLength: first.contextLength || props.settings.grok.contextLength })
+      } else if (first && !isGrok && !props.settings.model.modelId) {
+        updateModel({ modelId: first.id })
+      }
     } catch (error) {
       setModelStatus(errorMessage(error))
     } finally {
@@ -101,6 +145,28 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
     } finally {
       setGmailBusy(false)
     }
+  }
+
+  const connectGrok = async (): Promise<void> => {
+    setGrokBusy(true)
+    setGrokConnectionMessage(t('openingGrokBrowser'))
+    try {
+      props.onGrokStatusChange(await window.loclm.grok.connect())
+      setGrokConnectionMessage(t('grokConnectedSuccess'))
+      await testModel()
+    } catch (error) {
+      setGrokConnectionMessage(errorMessage(error))
+    } finally {
+      setGrokBusy(false)
+    }
+  }
+
+  const disconnectGrok = async (): Promise<void> => {
+    await window.loclm.grok.disconnect()
+    props.onGrokStatusChange({ connected: false })
+    setGrokConnectionMessage('')
+    setModels([])
+    updateSettings('modelSource', 'local')
   }
 
   const disconnectGmail = async (): Promise<void> => {
@@ -161,28 +227,85 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
           {tab === 'model' && (
             <div className="settings-section">
               <div className="field-grid two-columns">
-                <label className="field"><span>{t('provider')}</span><input value={props.settings.model.providerName} onChange={(event) => updateModel({ providerName: event.target.value })} /></label>
                 <label className="field"><span>{t('theme')}</span><select value={props.settings.theme} onChange={(event) => updateSettings('theme', event.target.value as AppSettings['theme'])}><option value="system">{t('systemTheme')}</option><option value="dark">{t('darkTheme')}</option><option value="light">{t('lightTheme')}</option></select></label>
+                <label className="field"><span>{t('language')}</span><select aria-label={t('language')} value={props.settings.language} onChange={(event) => updateSettings('language', event.target.value as AppSettings['language'])}><option value="en">{t('english')}</option><option value="hu">{t('hungarian')}</option></select></label>
               </div>
-              <label className="field"><span>{t('language')}</span><select aria-label={t('language')} value={props.settings.language} onChange={(event) => updateSettings('language', event.target.value as AppSettings['language'])}><option value="en">{t('english')}</option><option value="hu">{t('hungarian')}</option></select></label>
-              <label className="field"><span>{t('endpoint')}</span><input value={props.settings.model.baseUrl} onChange={(event) => updateModel({ baseUrl: event.target.value })} placeholder="http://127.0.0.1:1234/v1" /></label>
-              <label className="field"><span>{t('apiKey')} <small>{t('optional')}</small></span><input type="password" value={props.secrets.modelApiKey ?? ''} onChange={(event) => props.onSecretsChange({ ...props.secrets, modelApiKey: event.target.value })} onBlur={() => void window.loclm.secrets.set(props.secrets)} /></label>
-              <div className="field-grid two-columns">
-                <label className="field"><span>{t('model')}</span>
-                  {models.length ? <select value={props.settings.model.modelId} onChange={(event) => updateModel({ modelId: event.target.value })}><option value="">{t('selectModel')}</option>{models.map((model) => <option key={model.id} value={model.id}>{model.id}</option>)}</select>
-                    : <input value={props.settings.model.modelId} onChange={(event) => updateModel({ modelId: event.target.value })} placeholder="Model ID" />}
-                </label>
-                <label className="field"><span>{t('contextLimit')}</span><input type="number" min="1024" step="1024" value={props.settings.model.contextLength} onChange={(event) => updateModel({ contextLength: Number(event.target.value) || 8192 })} /></label>
+              <div className="source-toggle" role="tablist" aria-label={t('provider')}>
+                <button type="button" role="tab" aria-selected={!isGrok} onClick={() => { updateSettings('modelSource', 'local'); setModelStatus(''); setModels([]) }}><Cpu size={14} /> {t('localProvider')}</button>
+                <button type="button" role="tab" aria-selected={isGrok} onClick={() => { updateSettings('modelSource', 'grok'); setModelStatus(''); setModels([]) }}><Sparkles size={14} /> {t('grokProvider')}</button>
               </div>
-              <div className="setting-row">
-                <div><strong>{t('visionModel')}</strong><small>{t('visionModelDescription')}</small></div>
-                <Switch checked={props.settings.model.supportsVision} onChange={(checked) => updateModel({ supportsVision: checked })} label={t('visionModel')} />
-              </div>
-              <div className="settings-action-row">
-                <button className="secondary-button" type="button" onClick={() => void testModel()} disabled={busy}>{busy ? t('testing') : t('testConnection')}</button>
-                {modelStatus && <span className="muted-text">{modelStatus}</span>}
-              </div>
-              <div className="settings-note"><ShieldCheck size={15} /> {t('localDataNote')}</div>
+
+              {!isGrok ? (
+                <>
+                  <label className="field"><span>{t('provider')}</span><input value={props.settings.model.providerName} onChange={(event) => updateModel({ providerName: event.target.value })} /></label>
+                  <label className="field"><span>{t('endpoint')}</span><input value={props.settings.model.baseUrl} onChange={(event) => updateModel({ baseUrl: event.target.value })} placeholder="http://127.0.0.1:1234/v1" /></label>
+                  <label className="field"><span>{t('apiKey')} <small>{t('optional')}</small></span><input type="password" value={props.secrets.modelApiKey ?? ''} onChange={(event) => props.onSecretsChange({ ...props.secrets, modelApiKey: event.target.value })} onBlur={() => void window.loclm.secrets.set(props.secrets)} /></label>
+                  <div className="field-grid two-columns">
+                    <label className="field"><span>{t('model')}</span>
+                      {models.length ? <select value={props.settings.model.modelId} onChange={(event) => updateModel({ modelId: event.target.value })}><option value="">{t('selectModel')}</option>{models.map((model) => <option key={model.id} value={model.id}>{model.name ? `${model.name} (${model.id})` : model.id}</option>)}</select>
+                        : <input value={props.settings.model.modelId} onChange={(event) => updateModel({ modelId: event.target.value })} placeholder="Model ID" />}
+                    </label>
+                    <label className="field"><span>{t('contextLimit')}</span><input type="number" min="1024" step="1024" value={props.settings.model.contextLength} onChange={(event) => updateModel({ contextLength: Number(event.target.value) || 8192 })} /></label>
+                  </div>
+                  <div className="setting-row">
+                    <div><strong>{t('visionModel')}</strong><small>{t('visionModelDescription')}</small></div>
+                    <Switch checked={props.settings.model.supportsVision} onChange={(checked) => updateModel({ supportsVision: checked })} label={t('visionModel')} />
+                  </div>
+                  <div className="settings-action-row">
+                    <button className="secondary-button" type="button" onClick={() => void testModel()} disabled={busy}>{busy ? t('testing') : t('testConnection')}</button>
+                    {modelStatus && <span className="muted-text">{modelStatus}</span>}
+                  </div>
+                  <div className="settings-note"><ShieldCheck size={15} /> {t('localDataNote')}</div>
+                </>
+              ) : (
+                <>
+                  <div className="integration-box">
+                    <div className="integration-title"><Sparkles size={16} /><strong>{t('grokSubscription')}</strong><span className={props.grokStatus.connected ? 'connected-badge' : 'muted-badge'}>{props.grokStatus.connected ? props.grokStatus.email ?? t('connected') : t('notConnected')}</span></div>
+                    {!props.grokStatus.connected ? (
+                      <>
+                        <p className="gmail-connect-description">{t('grokConnectDescription')}</p>
+                        <button className="oauth-connect-button" type="button" disabled={grokBusy} onClick={() => void connectGrok()}>
+                          <span className="oauth-mark">G</span>
+                          <span><strong>{grokBusy ? t('signingInGrok') : t('signInGrok')}</strong><small>{t('opensDefaultBrowser')}</small></span>
+                          <ExternalLink size={15} />
+                        </button>
+                        {grokConnectionMessage ? <div className={grokConnectionMessage === t('grokConnectedSuccess') ? 'success-text' : 'warning-text'} role="status">{grokConnectionMessage}</div> : null}
+                        <div className="settings-note"><ShieldCheck size={15} /> {t('grokPrivacyNote')}</div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="settings-note"><Check size={15} /> {t('grokSessionNote')}</div>
+                        {grokConnectionMessage ? <div className="success-text" role="status">{grokConnectionMessage}</div> : null}
+                        <button className="text-button destructive" type="button" onClick={() => void disconnectGrok()}>{t('disconnectGrok')}</button>
+                        <small className="muted-text">{t('grokSignOutNote')}</small>
+                      </>
+                    )}
+                  </div>
+                  {props.grokStatus.connected ? (
+                    <>
+                      <div className="field-grid two-columns">
+                        <label className="field"><span>{t('model')}</span>
+                          {models.length ? <select value={props.settings.grok.modelId} onChange={(event) => {
+                            const selected = models.find((model) => model.id === event.target.value)
+                            updateGrok({ modelId: event.target.value, contextLength: selected?.contextLength || props.settings.grok.contextLength })
+                          }}><option value="">{t('selectGrokModel')}</option>{models.map((model) => <option key={model.id} value={model.id}>{model.name ? `${model.name} (${model.id})` : model.id}</option>)}</select>
+                            : <input value={props.settings.grok.modelId} onChange={(event) => updateGrok({ modelId: event.target.value })} placeholder="grok-4.6" />}
+                        </label>
+                        <label className="field"><span>{t('contextLimit')}</span><input type="number" min="1024" step="1024" value={props.settings.grok.contextLength} onChange={(event) => updateGrok({ contextLength: Number(event.target.value) || 500000 })} /></label>
+                      </div>
+                      <div className="setting-row">
+                        <div><strong>{t('visionModel')}</strong><small>{t('visionModelDescription')}</small></div>
+                        <Switch checked={props.settings.grok.supportsVision} onChange={(checked) => updateGrok({ supportsVision: checked })} label={t('visionModel')} />
+                      </div>
+                      <div className="settings-action-row">
+                        <button className="secondary-button" type="button" onClick={() => void testModel()} disabled={busy}>{busy ? t('testing') : t('testConnection')}</button>
+                        {modelStatus && <span className="muted-text">{modelStatus}</span>}
+                      </div>
+                      <div className="settings-note"><Sparkles size={15} /> {t('grokDataNote')}</div>
+                    </>
+                  ) : null}
+                </>
+              )}
             </div>
           )}
 
