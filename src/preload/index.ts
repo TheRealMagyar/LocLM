@@ -49,6 +49,11 @@ const api: LoclmApi = {
     connect: () => ipcRenderer.invoke('grok:connect'),
     disconnect: () => ipcRenderer.invoke('grok:disconnect')
   },
+  codex: {
+    status: () => ipcRenderer.invoke('codex:status'),
+    connect: () => ipcRenderer.invoke('codex:connect'),
+    disconnect: () => ipcRenderer.invoke('codex:disconnect')
+  },
   web: {
     search: (query, settings, language) => ipcRenderer.invoke('web:search', query, settings, language),
     openExternal: (url) => ipcRenderer.invoke('web:open-external', url)

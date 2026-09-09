@@ -335,13 +335,13 @@ function completeError(error: unknown, profile: ModelProfile): Error {
   if (error instanceof Error && error.name === 'AbortError') {
     return new Error(profile.source === 'grok'
       ? 'A Grok nem válaszolt időben. Próbáld újra.'
-      : 'A helyi modell túl lassan válaszolt. Csökkentsd a feladatok számát, vagy válassz Grokot a Tanulás oldalon.')
+      : 'A helyi modell túl lassan válaszolt. Csökkentsd a feladatok számát, vagy válassz Grokot vagy Codexet a Tanulás oldalon.')
   }
   const text = errorText(error)
   if (/fetch failed|ECONNREFUSED|ENOTFOUND|UND_ERR|Failed to parse URL|network/i.test(text)) {
     return new Error(profile.source === 'grok'
       ? 'A Grok kapcsolat sikertelen. A Beállításokban ellenőrizd, be vagy-e jelentkezve.'
-      : `A helyi modell nem elérhető (${profile.baseUrl || 'nincs végpont'}). Indítsd el az LM Studio-t, vagy válassz Grokot a Tanulás oldalon.`)
+      : `A helyi modell nem elérhető (${profile.baseUrl || 'nincs végpont'}). Indítsd el az LM Studio-t, vagy válassz Grokot vagy Codexet a Tanulás oldalon.`)
   }
   return error instanceof Error ? error : new Error(text)
 }

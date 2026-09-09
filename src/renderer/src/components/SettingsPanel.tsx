@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Check, ChevronDown, Cpu, Download, ExternalLink, FileText, Github, Globe2, Image, Mail, RefreshCw, ScanLine, Search, ShieldCheck, Sparkles, X } from 'lucide-react'
+import { Check, ChevronDown, Cpu, Download, ExternalLink, FileText, Github, Globe2, Image, Mail, RefreshCw, ScanLine, Search, ShieldCheck, Sparkles, SquareTerminal, X } from 'lucide-react'
 import { getTranslator, type Translate } from '../i18n'
 import { activeModelProfile } from '@shared/model'
 import type {
   AppSettings,
+  CodexConnectionStatus,
   GmailConfiguration,
   GmailConnectionStatus,
   GmailThreadSummary,
@@ -20,6 +21,7 @@ interface SettingsPanelProps {
   secrets: SecretSettings
   gmailStatus: GmailConnectionStatus
   grokStatus: GrokConnectionStatus
+  codexStatus: CodexConnectionStatus
   appInfo: { version: string; platform: string }
   updateState: UpdateState
   onClose: () => void
@@ -27,6 +29,7 @@ interface SettingsPanelProps {
   onSecretsChange: (secrets: SecretSettings) => void
   onGmailStatusChange: (status: GmailConnectionStatus) => void
   onGrokStatusChange: (status: GrokConnectionStatus) => void
+  onCodexStatusChange: (status: CodexConnectionStatus) => void
 }
 
 type SettingsTab = 'model' | 'plugins' | 'capture' | 'updates'
@@ -44,6 +47,8 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
   const [gmailAdvancedOpen, setGmailAdvancedOpen] = useState(false)
   const [grokBusy, setGrokBusy] = useState(false)
   const [grokConnectionMessage, setGrokConnectionMessage] = useState('')
+  const [codexBusy, setCodexBusy] = useState(false)
+  const [codexConnectionMessage, setCodexConnectionMessage] = useState('')
   const [shortcutStatus, setShortcutStatus] = useState('')
   const [webTestQuery, setWebTestQuery] = useState('LocLM local AI')
   const [webTestState, setWebTestState] = useState<{ status: 'idle' | 'busy' | 'success' | 'error'; message: string }>({ status: 'idle', message: '' })
@@ -59,10 +64,13 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
     if (!props.open) return
     void window.loclm.gmail.configuration().then(setGmailConfiguration)
     void window.loclm.grok.status().then(props.onGrokStatusChange)
+    void window.loclm.codex.status().then(props.onCodexStatusChange)
   }, [props.open])
 
   useEffect(() => {
-    if (!props.open || tab !== 'model' || props.settings.modelSource !== 'grok' || !props.grokStatus.connected) return
+    const source = props.settings.modelSource
+    const connected = source === 'grok' ? props.grokStatus.connected : source === 'codex' ? props.codexStatus.connected : false
+    if (!props.open || tab !== 'model' || source === 'local' || !connected) return
     let cancelled = false
     setBusy(true)
     setModelStatus(t('connecting'))
@@ -71,13 +79,22 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
       setModels(result.models)
       setModelStatus(t('availableModels', { latency: result.latencyMs, count: result.models.length }))
       const first = result.models[0]
-      if (first && !props.settings.grok.modelId) {
+      if (first && source === 'grok' && !props.settings.grok.modelId) {
         props.onSettingsChange({
           ...props.settings,
           grok: {
             ...props.settings.grok,
             modelId: first.id,
             contextLength: first.contextLength || props.settings.grok.contextLength
+          }
+        })
+      } else if (first && source === 'codex' && !props.settings.codex.modelId) {
+        props.onSettingsChange({
+          ...props.settings,
+          codex: {
+            ...props.settings.codex,
+            modelId: first.id,
+            contextLength: first.contextLength || props.settings.codex.contextLength
           }
         })
       }
@@ -87,7 +104,7 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
       if (!cancelled) setBusy(false)
     })
     return () => { cancelled = true }
-  }, [props.open, tab, props.settings.modelSource, props.grokStatus.connected])
+  }, [props.open, tab, props.settings.modelSource, props.grokStatus.connected, props.codexStatus.connected])
 
   if (!props.open) return null
 
@@ -97,7 +114,10 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
 
   const updateModel = (patch: Partial<AppSettings['model']>): void => updateSettings('model', { ...props.settings.model, ...patch })
   const updateGrok = (patch: Partial<AppSettings['grok']>): void => updateSettings('grok', { ...props.settings.grok, ...patch })
+  const updateCodex = (patch: Partial<AppSettings['codex']>): void => updateSettings('codex', { ...props.settings.codex, ...patch })
   const isGrok = props.settings.modelSource === 'grok'
+  const isCodex = props.settings.modelSource === 'codex'
+  const isLocal = props.settings.modelSource === 'local'
   const updateCapture = (patch: Partial<AppSettings['capture']>): void => updateSettings('capture', { ...props.settings.capture, ...patch })
   const updateUpdates = (patch: Partial<AppSettings['updates']>): void => updateSettings('updates', { ...props.settings.updates, ...patch })
   const updateWeb = (patch: Partial<AppSettings['web']>): void => updateSettings('web', { ...props.settings.web, ...patch })
@@ -114,7 +134,9 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
       const first = result.models[0]
       if (first && isGrok && !props.settings.grok.modelId) {
         updateGrok({ modelId: first.id, contextLength: first.contextLength || props.settings.grok.contextLength })
-      } else if (first && !isGrok && !props.settings.model.modelId) {
+      } else if (first && isCodex && !props.settings.codex.modelId) {
+        updateCodex({ modelId: first.id, contextLength: first.contextLength || props.settings.codex.contextLength })
+      } else if (first && isLocal && !props.settings.model.modelId) {
         updateModel({ modelId: first.id })
       }
     } catch (error) {
@@ -165,6 +187,27 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
     await window.loclm.grok.disconnect()
     props.onGrokStatusChange({ connected: false })
     setGrokConnectionMessage('')
+    setModels([])
+    updateSettings('modelSource', 'local')
+  }
+
+  const connectCodex = async (): Promise<void> => {
+    setCodexBusy(true)
+    setCodexConnectionMessage(t('openingCodexBrowser'))
+    try {
+      props.onCodexStatusChange(await window.loclm.codex.connect())
+      setCodexConnectionMessage(t('codexConnectedSuccess'))
+      await testModel()
+    } catch (error) {
+      setCodexConnectionMessage(errorMessage(error))
+    } finally {
+      setCodexBusy(false)
+    }
+  }
+
+  const disconnectCodex = async (): Promise<void> => {
+    props.onCodexStatusChange(await window.loclm.codex.disconnect())
+    setCodexConnectionMessage('')
     setModels([])
     updateSettings('modelSource', 'local')
   }
@@ -231,11 +274,12 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
                 <label className="field"><span>{t('language')}</span><select aria-label={t('language')} value={props.settings.language} onChange={(event) => updateSettings('language', event.target.value as AppSettings['language'])}><option value="en">{t('english')}</option><option value="hu">{t('hungarian')}</option></select></label>
               </div>
               <div className="source-toggle" role="tablist" aria-label={t('provider')}>
-                <button type="button" role="tab" aria-selected={!isGrok} onClick={() => { updateSettings('modelSource', 'local'); setModelStatus(''); setModels([]) }}><Cpu size={14} /> {t('localProvider')}</button>
+                <button type="button" role="tab" aria-selected={isLocal} onClick={() => { updateSettings('modelSource', 'local'); setModelStatus(''); setModels([]) }}><Cpu size={14} /> {t('localProvider')}</button>
                 <button type="button" role="tab" aria-selected={isGrok} onClick={() => { updateSettings('modelSource', 'grok'); setModelStatus(''); setModels([]) }}><Sparkles size={14} /> {t('grokProvider')}</button>
+                <button type="button" role="tab" aria-selected={isCodex} onClick={() => { updateSettings('modelSource', 'codex'); setModelStatus(''); setModels([]) }}><SquareTerminal size={14} /> {t('codexProvider')}</button>
               </div>
 
-              {!isGrok ? (
+              {isLocal ? (
                 <>
                   <label className="field"><span>{t('provider')}</span><input value={props.settings.model.providerName} onChange={(event) => updateModel({ providerName: event.target.value })} /></label>
                   <label className="field"><span>{t('endpoint')}</span><input value={props.settings.model.baseUrl} onChange={(event) => updateModel({ baseUrl: event.target.value })} placeholder="http://127.0.0.1:1234/v1" /></label>
@@ -257,7 +301,7 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
                   </div>
                   <div className="settings-note"><ShieldCheck size={15} /> {t('localDataNote')}</div>
                 </>
-              ) : (
+              ) : isGrok ? (
                 <>
                   <div className="integration-box">
                     <div className="integration-title"><Sparkles size={16} /><strong>{t('grokSubscription')}</strong><span className={props.grokStatus.connected ? 'connected-badge' : 'muted-badge'}>{props.grokStatus.connected ? props.grokStatus.email ?? t('connected') : t('notConnected')}</span></div>
@@ -302,6 +346,64 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
                         {modelStatus && <span className="muted-text">{modelStatus}</span>}
                       </div>
                       <div className="settings-note"><Sparkles size={15} /> {t('grokDataNote')}</div>
+                    </>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <div className="integration-box">
+                    <div className="integration-title">
+                      <SquareTerminal size={16} />
+                      <strong>{t('codexCli')}</strong>
+                      <span className={props.codexStatus.connected ? 'connected-badge' : 'muted-badge'}>
+                        {props.codexStatus.connected ? props.codexStatus.authMode ?? t('connected') : props.codexStatus.installed ? t('notConnected') : t('notInstalled')}
+                      </span>
+                    </div>
+                    {!props.codexStatus.installed ? (
+                      <>
+                        <p className="gmail-connect-description">{t('codexInstallDescription')}</p>
+                        <button className="secondary-button" type="button" onClick={() => void window.loclm.web.openExternal('https://developers.openai.com/codex/cli')}>
+                          <ExternalLink size={14} /> {t('openCodexInstallGuide')}
+                        </button>
+                        {props.codexStatus.error ? <div className="warning-text" role="status">{props.codexStatus.error}</div> : null}
+                      </>
+                    ) : !props.codexStatus.connected ? (
+                      <>
+                        <p className="gmail-connect-description">{t('codexConnectDescription')}</p>
+                        <button className="oauth-connect-button" type="button" disabled={codexBusy} onClick={() => void connectCodex()}>
+                          <span className="oauth-mark">O</span>
+                          <span><strong>{codexBusy ? t('signingInCodex') : t('signInCodex')}</strong><small>{t('opensDefaultBrowser')}</small></span>
+                          <ExternalLink size={15} />
+                        </button>
+                        {codexConnectionMessage ? <div className={codexConnectionMessage === t('codexConnectedSuccess') ? 'success-text' : 'warning-text'} role="status">{codexConnectionMessage}</div> : null}
+                        <div className="settings-note"><ShieldCheck size={15} /> {t('codexPrivacyNote')}</div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="settings-note"><Check size={15} /> {t('codexSessionNote', { version: props.codexStatus.version ?? '?' })}</div>
+                        {codexConnectionMessage ? <div className="success-text" role="status">{codexConnectionMessage}</div> : null}
+                        <button className="text-button destructive" type="button" onClick={() => void disconnectCodex()}>{t('disconnectCodex')}</button>
+                        <small className="muted-text">{t('codexSignOutNote')}</small>
+                      </>
+                    )}
+                  </div>
+                  {props.codexStatus.connected ? (
+                    <>
+                      <div className="field-grid two-columns">
+                        <label className="field"><span>{t('model')}</span>
+                          {models.length ? <select value={props.settings.codex.modelId} onChange={(event) => {
+                            const selected = models.find((model) => model.id === event.target.value)
+                            updateCodex({ modelId: event.target.value, contextLength: selected?.contextLength || props.settings.codex.contextLength })
+                          }}><option value="">{t('selectCodexModel')}</option>{models.map((model) => <option key={model.id} value={model.id}>{model.name ? `${model.name} (${model.id})` : model.id}</option>)}</select>
+                            : <input value={props.settings.codex.modelId} onChange={(event) => updateCodex({ modelId: event.target.value })} placeholder="gpt-5.6-sol" />}
+                        </label>
+                        <label className="field"><span>{t('contextLimit')}</span><input type="number" min="1024" step="1024" value={props.settings.codex.contextLength} onChange={(event) => updateCodex({ contextLength: Number(event.target.value) || 272000 })} /></label>
+                      </div>
+                      <div className="settings-action-row">
+                        <button className="secondary-button" type="button" onClick={() => void testModel()} disabled={busy}>{busy ? t('testing') : t('testConnection')}</button>
+                        {modelStatus && <span className="muted-text">{modelStatus}</span>}
+                      </div>
+                      <div className="settings-note"><SquareTerminal size={15} /> {t('codexDataNote')}</div>
                     </>
                   ) : null}
                 </>

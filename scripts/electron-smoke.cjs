@@ -160,6 +160,29 @@ async function main() {
     await window.getByRole('tab', { name: 'Grok' }).click()
     await window.waitForFunction(() => [...document.querySelectorAll('.source-toggle button')].some((button) => button.getAttribute('aria-selected') === 'true' && button.textContent?.includes('Grok')))
     if (!(await window.locator('.oauth-connect-button, .connected-badge').count())) throw new Error('The Grok sign-in UI did not appear.')
+    await window.getByRole('tab', { name: 'Codex' }).click()
+    await window.waitForFunction(() => [...document.querySelectorAll('.source-toggle button')].some((button) => button.getAttribute('aria-selected') === 'true' && button.textContent?.includes('Codex')))
+    if (!(await window.locator('.integration-box').filter({ hasText: 'Codex CLI' }).count())) throw new Error('The Codex CLI provider UI did not appear.')
+    if (screenshotDir) await window.screenshot({ path: path.join(screenshotDir, 'settings-codex.png') })
+    if (process.env.LOCLM_SMOKE_CODEX_LIVE === '1') {
+      const codexResult = await window.evaluate(async () => {
+        const status = await window.loclm.codex.status()
+        if (!status.connected) return { skipped: true, reason: status.error ?? 'Codex CLI is not signed in.' }
+        const baseProfile = { source: 'codex', providerName: 'Codex CLI', baseUrl: 'codex-cli://local', modelId: '', contextLength: 272000, supportsVision: true }
+        const models = await window.loclm.models.list(baseProfile)
+        if (!models.length) throw new Error('Codex CLI returned an empty model catalog.')
+        const content = await window.loclm.models.complete({
+          requestId: crypto.randomUUID(),
+          chatId: 'smoke-codex',
+          model: { ...baseProfile, modelId: models[0].id, contextLength: models[0].contextLength ?? baseProfile.contextLength },
+          systemPrompt: 'Follow the requested output format exactly.',
+          messages: [{ id: crypto.randomUUID(), role: 'user', content: 'Reply with exactly CODEX_INTEGRATION_OK', createdAt: new Date().toISOString(), status: 'complete' }],
+          timeoutMs: 120000
+        })
+        return { skipped: false, content }
+      })
+      if (!codexResult.skipped && codexResult.content.trim() !== 'CODEX_INTEGRATION_OK') throw new Error(`Unexpected Codex CLI response: ${codexResult.content}`)
+    }
     await window.getByRole('tab', { name: 'Local AI' }).click()
     await window.waitForFunction(() => [...document.querySelectorAll('.source-toggle button')].some((button) => button.getAttribute('aria-selected') === 'true' && button.textContent?.includes('Local AI')))
     await window.locator('input[placeholder="http://127.0.0.1:1234/v1"]').fill('http://127.0.0.1:12345/v1')

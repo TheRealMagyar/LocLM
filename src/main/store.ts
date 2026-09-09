@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile, copyFile, stat } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { Attachment, PersistedState } from '../shared/types'
-import { createDefaultGrokSettings } from '../shared/model'
+import { createDefaultCodexSettings, createDefaultGrokSettings } from '../shared/model'
 
 const now = (): string => new Date().toISOString()
 
@@ -51,6 +51,7 @@ function createDefaultState(): PersistedState {
         supportsVision: true
       },
       grok: createDefaultGrokSettings(),
+      codex: createDefaultCodexSettings(),
       capture: {
         enabled: true,
         shortcut: 'CommandOrControl+Shift+S',
@@ -112,7 +113,7 @@ export class StateStore {
           settings: {
             ...parsed.settings,
             language: parsed.settings.language === 'hu' ? 'hu' : 'en',
-            modelSource: parsed.settings.modelSource === 'grok' ? 'grok' : 'local',
+            modelSource: parsed.settings.modelSource === 'grok' || parsed.settings.modelSource === 'codex' ? parsed.settings.modelSource : 'local',
             model: {
               source: 'local',
               ...parsed.settings.model
@@ -120,6 +121,10 @@ export class StateStore {
             grok: {
               ...createDefaultGrokSettings(),
               ...parsed.settings.grok
+            },
+            codex: {
+              ...createDefaultCodexSettings(),
+              ...parsed.settings.codex
             },
             web: {
               ...parsed.settings.web,

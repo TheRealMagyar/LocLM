@@ -6,6 +6,7 @@ import type {
   CaptureSource,
   ChatRequest,
   ChatStreamEvent,
+  CodexConnectionStatus,
   FileReadResult,
   GmailConnectionStatus,
   GmailConfiguration,
@@ -68,6 +69,11 @@ export interface LoclmApi {
     status: () => Promise<GrokConnectionStatus>
     connect: () => Promise<GrokConnectionStatus>
     disconnect: () => Promise<void>
+  }
+  codex: {
+    status: () => Promise<CodexConnectionStatus>
+    connect: () => Promise<CodexConnectionStatus>
+    disconnect: () => Promise<CodexConnectionStatus>
   }
   web: {
     search: (query: string, settings: WebSettings, language: AppLanguage) => Promise<WebSearchResult[]>

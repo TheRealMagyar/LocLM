@@ -5,8 +5,8 @@ LocLM is a local-first, Electron + React + Vite AI management app. It offers cha
 ## Main features
 
 - Projects that can be created, renamed, and deleted, each with its own chat history.
-- Searchable project folder for images and documents, with open and show-in-folder actions; project files are automatically available as context to local and Grok models.
-- LM Studio and other OpenAI-compatible local endpoints, plus Grok subscriptions through Grok CLI authentication.
+- Searchable project folder for images and documents, with open and show-in-folder actions; project files are automatically available as context to local, Grok, and Codex models.
+- LM Studio and other OpenAI-compatible local endpoints, Grok subscriptions, and Codex CLI with an existing ChatGPT or API-key login.
 - Streaming model responses and the ability to stop generation.
 - Collapsible, live thinking workflow; separate display of `reasoning_content` and `<think>` blocks published by reasoning models.
 - Global, remappable screenshot shortcut (`Ctrl+Shift+S`).
@@ -56,6 +56,16 @@ LocLM uses the same session as Grok CLI (`~/.grok/auth.json`). With a SuperGrok 
 4. Test the connection, then select one of the listed Grok models, such as `grok-4.6`.
 
 Messages sent through the Grok provider use xAI's Grok CLI proxy (`cli-chat-proxy.grok.com`), while local models continue to use the configured OpenAI-compatible endpoint.
+
+## Codex CLI
+
+LocLM can run OpenAI models through an installed Codex CLI and reuses its existing login without reading or copying credentials.
+
+1. Install Codex CLI and run `codex login` once, or use the **Sign in with ChatGPT** button in Settings → AI → **Codex**.
+2. Select **Codex** as the provider and choose one of the models reported by the CLI.
+3. Chat normally or use the selected model for learning-game generation and written evaluation.
+
+LocLM invokes stable non-interactive mode (`codex exec --json`) with an ephemeral session and a read-only sandbox. Project-file text and image attachments are passed as model context. If the executable is outside `PATH`, set `LOCLM_CODEX_PATH` to the full Codex binary path before launching LocLM.
 
 ## LM Studio setup
 

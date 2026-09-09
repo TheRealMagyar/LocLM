@@ -116,7 +116,7 @@ export interface LearningGame {
 }
 
 export type PluginId = 'gmail' | 'web' | 'vision' | 'documents'
-export type ModelSource = 'local' | 'grok'
+export type ModelSource = 'local' | 'grok' | 'codex'
 
 export interface ModelProfile {
   source?: ModelSource
@@ -128,6 +128,12 @@ export interface ModelProfile {
 }
 
 export interface GrokModelSettings {
+  modelId: string
+  contextLength: number
+  supportsVision: boolean
+}
+
+export interface CodexModelSettings {
   modelId: string
   contextLength: number
   supportsVision: boolean
@@ -163,6 +169,7 @@ export interface AppSettings {
   modelSource: ModelSource
   model: ModelProfile
   grok: GrokModelSettings
+  codex: CodexModelSettings
   capture: CaptureSettings
   updates: UpdateSettings
   gmail: GmailSettings
@@ -193,6 +200,15 @@ export interface ModelDescriptor {
 export interface GrokConnectionStatus {
   connected: boolean
   email?: string
+}
+
+export interface CodexConnectionStatus {
+  installed: boolean
+  connected: boolean
+  version?: string
+  authMode?: string
+  executablePath?: string
+  error?: string
 }
 
 export interface ChatRequest {

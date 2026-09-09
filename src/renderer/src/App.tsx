@@ -10,7 +10,7 @@ import Sidebar from './components/Sidebar'
 import TitleBar from './components/TitleBar'
 import { getTranslator } from './i18n'
 import { createLearningGame } from '@shared/learning'
-import { activeModelProfile, createGrokProfile, formatProfileLabel, modelKey, resolveChatModel } from '@shared/model'
+import { activeModelProfile, createCodexProfile, createGrokProfile, formatProfileLabel, modelKey, resolveChatModel } from '@shared/model'
 import type {
   AiActivityStatus,
   AiActivityStep,
@@ -21,6 +21,7 @@ import type {
   Chat,
   ChatMessage,
   ChatStreamEvent,
+  CodexConnectionStatus,
   GmailConnectionStatus,
   GrokConnectionStatus,
   LearningGame,
@@ -58,7 +59,7 @@ interface ChatModelOption {
   source: ModelSource
   modelId: string
   label: string
-  group: 'local' | 'grok'
+  group: 'local' | 'grok' | 'codex'
 }
 
 const timestamp = (): string => new Date().toISOString()
@@ -68,6 +69,7 @@ export default function App(): React.JSX.Element {
   const [secrets, setSecrets] = useState<SecretSettings>({})
   const [gmailStatus, setGmailStatus] = useState<GmailConnectionStatus>({ connected: false })
   const [grokStatus, setGrokStatus] = useState<GrokConnectionStatus>({ connected: false })
+  const [codexStatus, setCodexStatus] = useState<CodexConnectionStatus>({ installed: false, connected: false })
   const [appInfo, setAppInfo] = useState({ version: '0.1.0', platform: 'desktop' })
   const [updateState, setUpdateState] = useState<UpdateState>({ status: 'idle' })
   const [prompt, setPrompt] = useState('')
@@ -76,7 +78,7 @@ export default function App(): React.JSX.Element {
   const [gmailEnabled, setGmailEnabled] = useState(false)
   const [activeRequests, setActiveRequests] = useState<Record<string, ActiveRequest>>({})
   const [queues, setQueues] = useState<Record<string, QueuedTurn[]>>({})
-  const [modelCatalog, setModelCatalog] = useState<{ local: ModelDescriptor[]; grok: ModelDescriptor[] }>({ local: [], grok: [] })
+  const [modelCatalog, setModelCatalog] = useState<{ local: ModelDescriptor[]; grok: ModelDescriptor[]; codex: ModelDescriptor[] }>({ local: [], grok: [], codex: [] })
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState('model')
   const [activeView, setActiveView] = useState<'chat' | 'files' | 'learn'>('chat')
@@ -103,13 +105,15 @@ export default function App(): React.JSX.Element {
       window.loclm.secrets.get(),
       window.loclm.gmail.status(),
       window.loclm.grok.status(),
+      window.loclm.codex.status(),
       window.loclm.app.getInfo()
-    ]).then(([loadedState, loadedSecrets, loadedGmail, loadedGrok, loadedInfo]) => {
+    ]).then(([loadedState, loadedSecrets, loadedGmail, loadedGrok, loadedCodex, loadedInfo]) => {
       stateRef.current = loadedState
       setState(loadedState)
       setSecrets(loadedSecrets)
       setGmailStatus(loadedGmail)
       setGrokStatus(loadedGrok)
+      setCodexStatus(loadedCodex)
       setAppInfo(loadedInfo)
       hydratedRef.current = true
     })
@@ -137,16 +141,19 @@ export default function App(): React.JSX.Element {
     let cancelled = false
     const settings = state.settings
     void (async () => {
-      const [local, grok] = await Promise.all([
+      const [local, grok, codex] = await Promise.all([
         window.loclm.models.list({ ...settings.model, source: 'local' }).catch(() => [] as ModelDescriptor[]),
         grokStatus.connected
           ? window.loclm.models.list(createGrokProfile(settings.grok)).catch(() => [] as ModelDescriptor[])
+          : Promise.resolve([] as ModelDescriptor[]),
+        codexStatus.connected
+          ? window.loclm.models.list(createCodexProfile(settings.codex)).catch(() => [] as ModelDescriptor[])
           : Promise.resolve([] as ModelDescriptor[])
       ])
-      if (!cancelled) setModelCatalog({ local, grok })
+      if (!cancelled) setModelCatalog({ local, grok, codex })
     })()
     return () => { cancelled = true }
-  }, [state?.settings.model.baseUrl, state?.settings.model.modelId, state?.settings.grok.modelId, grokStatus.connected])
+  }, [state?.settings.model.baseUrl, state?.settings.model.modelId, state?.settings.grok.modelId, state?.settings.codex.modelId, grokStatus.connected, codexStatus.connected])
 
   useEffect(() => {
     const unsubscribeChat = window.loclm.models.onEvent(handleStreamEvent)
@@ -628,11 +635,7 @@ export default function App(): React.JSX.Element {
 
   const createGame = (): void => {
     if (!state) return
-    const game = createLearningGame({
-      model: grokStatus.connected && state.settings.grok.modelId
-        ? createGrokProfile(state.settings.grok)
-        : activeModelProfile(state.settings)
-    })
+    const game = createLearningGame({ model: activeModelProfile(state.settings) })
     setState({
       ...state,
       projects: state.projects.map((project) => project.id === state.activeProjectId
@@ -693,7 +696,7 @@ export default function App(): React.JSX.Element {
   const activeGame = learningGames.find((game) => game.id === activeGameId) ?? learningGames[0]
   const activeChatModel = resolveChatModel(activeChat, state.settings)
   const runningByChat = Object.fromEntries(Object.values(activeRequests).map((request) => [request.chatId, request.modelLabel]))
-  const chatModelOptions = buildChatModelOptions(state.settings, modelCatalog, grokStatus.connected, activeChatModel)
+  const chatModelOptions = buildChatModelOptions(state.settings, modelCatalog, grokStatus.connected, codexStatus.connected, activeChatModel)
 
   return (
     <div className="app-shell">
@@ -791,6 +794,7 @@ export default function App(): React.JSX.Element {
         secrets={secrets}
         gmailStatus={gmailStatus}
         grokStatus={grokStatus}
+        codexStatus={codexStatus}
         appInfo={appInfo}
         updateState={updateState}
         onClose={() => setSettingsOpen(false)}
@@ -798,6 +802,7 @@ export default function App(): React.JSX.Element {
         onSecretsChange={setSecrets}
         onGmailStatusChange={setGmailStatus}
         onGrokStatusChange={setGrokStatus}
+        onCodexStatusChange={setCodexStatus}
       />
       {newProjectOpen && (
         <Modal title={t('newProject')} description={t('projectDescription')} closeLabel={t('close')} onClose={() => setNewProjectOpen(false)}>
@@ -999,8 +1004,9 @@ function messagesForTurn(messages: ChatMessage[], userMessageId: string): ChatMe
 
 function buildChatModelOptions(
   settings: AppSettings,
-  catalog: { local: ModelDescriptor[]; grok: ModelDescriptor[] },
+  catalog: { local: ModelDescriptor[]; grok: ModelDescriptor[]; codex: ModelDescriptor[] },
   grokConnected: boolean,
+  codexConnected: boolean,
   current: ModelProfile
 ): ChatModelOption[] {
   const options: ChatModelOption[] = []
@@ -1020,13 +1026,22 @@ function buildChatModelOptions(
       options.push({ key: `grok:${model.id}`, source: 'grok', modelId: model.id, label: model.name ? `${model.name}` : model.id, group: 'grok' })
     }
   }
+  if (codexConnected) {
+    const codexIds = new Set(catalog.codex.map((model) => model.id))
+    if (settings.codex.modelId && !codexIds.has(settings.codex.modelId)) {
+      options.push({ key: `codex:${settings.codex.modelId}`, source: 'codex', modelId: settings.codex.modelId, label: `Codex · ${settings.codex.modelId}`, group: 'codex' })
+    }
+    for (const model of catalog.codex) {
+      options.push({ key: `codex:${model.id}`, source: 'codex', modelId: model.id, label: model.name ? `${model.name} (${model.id})` : model.id, group: 'codex' })
+    }
+  }
   if (current.modelId && !options.some((option) => option.key === modelKey(current))) {
     options.unshift({
       key: modelKey(current),
-      source: current.source === 'grok' ? 'grok' : 'local',
+      source: current.source === 'grok' ? 'grok' : current.source === 'codex' ? 'codex' : 'local',
       modelId: current.modelId,
       label: formatProfileLabel(current),
-      group: current.source === 'grok' ? 'grok' : 'local'
+      group: current.source === 'grok' ? 'grok' : current.source === 'codex' ? 'codex' : 'local'
     })
   }
   return options
@@ -1035,7 +1050,7 @@ function buildChatModelOptions(
 function profileFromOption(
   optionKey: string,
   settings: AppSettings,
-  catalog: { local: ModelDescriptor[]; grok: ModelDescriptor[] }
+  catalog: { local: ModelDescriptor[]; grok: ModelDescriptor[]; codex: ModelDescriptor[] }
 ): ModelProfile | undefined {
   const separator = optionKey.indexOf(':')
   if (separator <= 0) return undefined
@@ -1048,6 +1063,14 @@ function profileFromOption(
       modelId,
       contextLength: listed?.contextLength || settings.grok.contextLength || 500_000,
       supportsVision: settings.grok.supportsVision
+    })
+  }
+  if (source === 'codex') {
+    const listed = catalog.codex.find((model) => model.id === modelId)
+    return createCodexProfile({
+      modelId,
+      contextLength: listed?.contextLength || settings.codex.contextLength || 272_000,
+      supportsVision: settings.codex.supportsVision
     })
   }
   return {

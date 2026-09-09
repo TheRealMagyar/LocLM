@@ -222,6 +222,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .model-picker.running .model-picker-trigger { border-color: color-mix(in srgb, var(--accent) 48%, var(--border)); background: color-mix(in srgb, var(--accent-soft) 70%, var(--surface)); }
 .model-picker-mark { display: grid; place-items: center; flex: 0 0 auto; width: 26px; height: 26px; border-radius: 8px; background: var(--surface-soft); color: var(--muted); }
 .model-picker-mark.grok { background: var(--accent-soft); color: var(--accent); }
+.model-picker-mark.codex { background: color-mix(in srgb, #10a37f 15%, var(--surface)); color: #10a37f; }
 .model-picker-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 1px; }
 .model-picker-copy strong { overflow: hidden; color: var(--text); font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .model-picker-copy small { display: flex; align-items: center; gap: 6px; overflow: hidden; color: var(--accent); font-size: 9px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
@@ -500,7 +501,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .settings-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin: 20px 22px 0; padding: 4px; border-radius: 10px; background: var(--surface-soft); }
 .settings-tabs button { display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; padding: 8px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; font-size: 11px; }
 .settings-tabs button[aria-selected="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 5px color-mix(in srgb, var(--text) 8%, transparent); }
-.source-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 10px; background: var(--surface-soft); }
+.source-toggle { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border-radius: 10px; background: var(--surface-soft); }
 .source-toggle button { display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; padding: 9px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; font-size: 12px; font-weight: 600; }
 .source-toggle button[aria-selected="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 5px color-mix(in srgb, var(--text) 8%, transparent); }
 .oauth-connect-button, .gmail-connect-button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); cursor: pointer; text-align: left; }

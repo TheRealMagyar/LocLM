@@ -6,7 +6,7 @@ const MAX_REFERENCE_CHARS = 24_000
 const LOCAL_REFERENCE_CHARS = 6_000
 
 export function isCloudModel(profile?: ModelProfile | null): boolean {
-  return profile?.source === 'grok'
+  return profile?.source === 'grok' || profile?.source === 'codex'
 }
 
 export function generationPlan(profile: ModelProfile | undefined, targetCount: number, type: LearningGameType = 'quiz'): {

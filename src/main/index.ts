@@ -9,6 +9,7 @@ import { GmailService } from './gmail-service'
 import { UpdaterService } from './updater-service'
 import { WebSearchService } from './web-service'
 import { GrokService } from './grok-service'
+import { CodexCliService } from './codex-cli-service'
 import { activeModelProfile } from '../shared/model'
 import type { AppLanguage, CaptureSelection, ChatRequest, ModelProfile, PersistedState, SecretSettings, WebSettings } from '../shared/types'
 
@@ -26,6 +27,7 @@ const documentService = new DocumentService()
 const webService = new WebSearchService()
 const gmailService = new GmailService(vault, import.meta.env.MAIN_VITE_GOOGLE_CLIENT_ID ?? '')
 const grokService = new GrokService()
+const codexService = new CodexCliService(() => join(app.getPath('userData'), 'codex-workspace'))
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -79,6 +81,7 @@ function registerIpc(): void {
 
   ipcMain.handle('models:list', async (_event, profile: ModelProfile) => {
     try {
+      if (profile.source === 'codex') return await codexService.listModels()
       const auth = await resolveModelAuth(profile)
       return await aiService.listModels(auth.profile, auth.apiKey, auth.extraHeaders)
     } catch {
@@ -86,12 +89,17 @@ function registerIpc(): void {
     }
   })
   ipcMain.handle('models:test', async (_event, profile: ModelProfile) => {
+    if (profile.source === 'codex') return codexService.testConnection()
     const auth = await resolveModelAuth(profile)
     return aiService.testConnection(auth.profile, auth.apiKey, auth.extraHeaders)
   })
   ipcMain.on('ai:chat:start', (event, request: ChatRequest) => {
     void (async () => {
       try {
+        if (request.model.source === 'codex') {
+          await codexService.startChat(request, event.sender)
+          return
+        }
         const auth = await resolveModelAuth(request.model)
         await aiService.startChat({ ...request, model: auth.profile, apiKey: auth.apiKey }, event.sender, auth.extraHeaders)
       } catch (error) {
@@ -100,9 +108,13 @@ function registerIpc(): void {
       }
     })()
   })
-  ipcMain.on('ai:chat:abort', (_event, requestId: string) => aiService.abort(requestId))
+  ipcMain.on('ai:chat:abort', (_event, requestId: string) => {
+    aiService.abort(requestId)
+    codexService.abort(requestId)
+  })
   ipcMain.handle('models:complete', async (_event, request: ChatRequest) => {
     try {
+      if (request.model.source === 'codex') return await codexService.complete(request)
       const auth = await resolveModelAuth(request.model)
       return await aiService.complete({ ...request, model: auth.profile, apiKey: auth.apiKey }, auth.extraHeaders)
     } catch (error) {
@@ -162,6 +174,15 @@ function registerIpc(): void {
     return status
   })
   ipcMain.handle('grok:disconnect', () => grokService.disconnect())
+
+  ipcMain.handle('codex:status', () => codexService.status())
+  ipcMain.handle('codex:connect', async () => {
+    const status = await codexService.connect()
+    mainWindow?.show()
+    mainWindow?.focus()
+    return status
+  })
+  ipcMain.handle('codex:disconnect', () => codexService.disconnect())
 
   ipcMain.handle('web:search', (_event, query: string, settings: WebSettings, language: AppLanguage) => webService.search(query, settings, vault.getSecrets().braveApiKey, language))
   ipcMain.handle('web:open-external', async (_event, url: string) => {
@@ -242,4 +263,5 @@ app.on('will-quit', () => {
   captureService?.dispose()
   updaterService?.dispose()
   webService.dispose()
+  codexService.dispose()
 })
