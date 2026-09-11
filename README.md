@@ -6,12 +6,12 @@
     Run local OpenAI-compatible models, use your existing Grok or Codex CLI session, and keep every conversation and file organized by project.
   </p>
 
-  [![Latest release](https://img.shields.io/github/v/release/TheRealMagyar/LocLM?display_name=tag&sort=semver)](https://github.com/TheRealMagyar/LocLM/releases/latest)
+  [![Release: v0.1.7](https://img.shields.io/badge/release-v0.1.7-2ea44f.svg)](https://github.com/TheRealMagyar/LocLM/releases/tag/v0.1.7)
   [![Release build](https://github.com/TheRealMagyar/LocLM/actions/workflows/release.yml/badge.svg)](https://github.com/TheRealMagyar/LocLM/actions/workflows/release.yml)
   [![License: MIT](https://img.shields.io/badge/license-MIT-1f6feb.svg)](LICENSE)
   ![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D4?logo=windows)
 
-  [Download for Windows](https://github.com/TheRealMagyar/LocLM/releases/latest) · [Features](#features) · [Setup](#getting-started) · [Development](#development)
+  [Download for Windows](https://github.com/TheRealMagyar/LocLM/releases/download/v0.1.7/LocLM-Setup-0.1.7.exe) · [Features](#features) · [Setup](#getting-started) · [Development](#development)
 </div>
 
 <br />
@@ -71,7 +71,7 @@ For a clean GitHub preview, keep media at a 16:9 or similar desktop aspect ratio
 
 ### Windows
 
-Download the latest installer from [GitHub Releases](https://github.com/TheRealMagyar/LocLM/releases/latest), then run the `LocLM Setup` executable.
+Download [LocLM Setup 0.1.7 for Windows](https://github.com/TheRealMagyar/LocLM/releases/download/v0.1.7/LocLM-Setup-0.1.7.exe), or open the complete [v0.1.7 release page](https://github.com/TheRealMagyar/LocLM/releases/tag/v0.1.7), then run the installer.
 
 The current community builds may be unsigned. If Windows SmartScreen appears, verify that the download came from this repository's Releases page before choosing **More info → Run anyway**.
 
