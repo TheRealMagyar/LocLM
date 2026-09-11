@@ -1,7 +1,15 @@
 {
   "name": "loclm",
-  "version": "0.1.6",
-  "description": "Local-first AI desktop workspace for projects, chats and plugins.",
+  "version": "0.1.7",
+  "description": "Local-first AI desktop workspace for projects, research, documents, and learning.",
+  "homepage": "https://github.com/TheRealMagyar/LocLM",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TheRealMagyar/LocLM.git"
+  },
+  "bugs": {
+    "url": "https://github.com/TheRealMagyar/LocLM/issues"
+  },
   "main": "./out/main/index.js",
   "author": "LocLM",
   "license": "MIT",
