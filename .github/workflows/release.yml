@@ -10,18 +10,8 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            target: win
-          - os: macos-latest
-            target: mac
-          - os: ubuntu-latest
-            target: linux
-    runs-on: ${{ matrix.os }}
+  windows-release:
+    runs-on: windows-latest
 
     steps:
       - name: Checkout
@@ -44,12 +34,14 @@ jobs:
       - name: Build application
         run: pnpm build
 
-      - name: Build and publish release
-        run: pnpm exec electron-builder --${{ matrix.target }} --publish always
+      - name: Package Windows application
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: pnpm exec electron-builder --win --publish never
+
+      - name: Build and publish Windows release
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        run: pnpm exec electron-builder --win --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
