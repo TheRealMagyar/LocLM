@@ -1,6 +1,6 @@
 {
   "name": "loclm",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Local-first AI desktop workspace for projects, research, documents, and learning.",
   "homepage": "https://github.com/TheRealMagyar/LocLM",
   "repository": {
@@ -84,6 +84,10 @@
       "allowToChangeInstallationDirectory": true,
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico"
+    },
+    "publish": {
+      "provider": "github",
+      "releaseType": "release"
     }
   }
 }
