@@ -112,7 +112,7 @@ const en = {
   generatingTasks: "Generating tasks…",
   generatingBatch: "Generating tasks {from}–{to} of {total}…",
   localGenerationHint:
-    "Local models get a speed boost: shorter source text, 4 tasks per batch, compact JSON, and a 2.5 minute limit. Prefer Grok or Codex for large sets.",
+    "Local models get a speed boost: shorter source text, 4 tasks per batch, and compact JSON. The wait limit is the response timeout in AI settings.",
   cloudGenerationHint:
     "Cloud AI uses a compact request: trimmed source, short JSON, output stops when the tasks are ready, and scoring is local unless a written justification is needed.",
   localScoreSummary:
@@ -236,6 +236,8 @@ const en = {
   model: "Model",
   selectModel: "Select a model",
   contextLimit: "Context limit",
+  requestTimeout: "Response timeout (seconds)",
+  requestTimeoutHint: "How long to wait for a model response",
   visionModel: "Vision model",
   visionModelDescription:
     "Images and screen captures are sent directly to the model.",
@@ -454,7 +456,7 @@ const huBase: Partial<Record<TranslationKey, string>> = {
   generatingTasks: "Feladatok készítése…",
   generatingBatch: "Feladatok készítése: {from}–{to} / {total}…",
   localGenerationHint:
-    "Helyi modellnél gyorsítás: rövidebb forrás, 4-esével készülnek a feladatok, tömör JSON, 2,5 perc limit. Nagyobb szetthez a Grok jobb.",
+    "Helyi modellnél gyorsítás: rövidebb forrás, 4-esével készülnek a feladatok, tömör JSON. A várakozási limit a Beállításokban megadott válasz időkorlát.",
   cloudGenerationHint:
     "A Grok tömör kérést kap: vágott forrás, rövid JSON, a kimenet megáll, ha kész a feladatsor. A pontozás helyi, modellhívás csak indoklásos válasznál megy.",
   localScoreSummary:
@@ -541,6 +543,8 @@ const huBase: Partial<Record<TranslationKey, string>> = {
   model: "Modell",
   selectModel: "Válassz modellt",
   contextLimit: "Context limit",
+  requestTimeout: "Válasz időkorlát (másodperc)",
+  requestTimeoutHint: "Ennyi ideig vár a modell válaszára",
   visionModel: "Vizuális modell",
   visionModelDescription:
     "A modell közvetlenül kapja meg a képeket és képernyőkivágásokat.",
@@ -636,7 +640,7 @@ const hu: Record<TranslationKey, string> = {
     "A LocLM helyi AI-jal, Grokkal vagy Codex CLI-jal dolgozik. Csatolj fájlt, készíts képernyőkivágást, vagy kapcsold be a webes környezetet.",
   codexModelsGroup: "Codex CLI",
   localGenerationHint:
-    "Helyi modellnél gyorsítás: rövidebb forrás, 4-esével készülnek a feladatok, tömör JSON, 2,5 perc limit. Nagyobb szetthez a Grok vagy a Codex jobb.",
+    "Helyi modellnél gyorsítás: rövidebb forrás, 4-esével készülnek a feladatok, tömör JSON. A várakozási limit a Beállításokban megadott válasz időkorlát.",
   cloudGenerationHint:
     "A felhős AI tömör kérést kap: vágott forrás, rövid JSON, a kimenet megáll, ha kész a feladatsor. A pontozás helyi, modellhívás csak indoklásos válasznál megy.",
   settingsSubtitle:

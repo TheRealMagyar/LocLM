@@ -158,10 +158,25 @@ export interface WebSettings {
   searxngUrl: string
 }
 
+export const DEFAULT_REQUEST_TIMEOUT_SECONDS = 150
+export const MIN_REQUEST_TIMEOUT_SECONDS = 15
+export const MAX_REQUEST_TIMEOUT_SECONDS = 1800
+
+export function clampRequestTimeoutSeconds(value: number | undefined): number {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return DEFAULT_REQUEST_TIMEOUT_SECONDS
+  return Math.min(MAX_REQUEST_TIMEOUT_SECONDS, Math.max(MIN_REQUEST_TIMEOUT_SECONDS, Math.round(parsed)))
+}
+
+export function requestTimeoutMs(seconds: number | undefined): number {
+  return clampRequestTimeoutSeconds(seconds) * 1000
+}
+
 export interface AppSettings {
   language: AppLanguage
   theme: 'system' | 'light' | 'dark'
   modelSource: ModelSource
+  requestTimeoutSeconds: number
   model: ModelProfile
   grok: GrokModelSettings
   codex: CodexModelSettings

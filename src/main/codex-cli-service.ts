@@ -188,7 +188,7 @@ export class CodexCliService {
       let settled = false
       const timer = setTimeout(() => {
         child.kill()
-        finish(() => reject(new Error('A Codex CLI nem válaszolt időben. Próbáld újra.')))
+        finish(() => reject(new Error('A Codex CLI nem válaszolt a megadott időkorláton belül. Növeld a válasz időkorlátot a Beállításokban, vagy próbáld újra.')))
       }, timeoutMs)
       const finish = (callback: () => void): void => {
         if (settled) return
