@@ -11,6 +11,7 @@ import TitleBar from './components/TitleBar'
 import { getTranslator } from './i18n'
 import { createLearningGame } from '@shared/learning'
 import { activeModelProfile, createCodexProfile, createGrokProfile, formatProfileLabel, modelKey, resolveChatModel } from '@shared/model'
+import { requestTimeoutMs } from '@shared/types'
 import type {
   AiActivityStatus,
   AiActivityStep,
@@ -459,6 +460,7 @@ export default function App(): React.JSX.Element {
         requestId: request.requestId,
         chatId,
         model: turn.model,
+        timeoutMs: requestTimeoutMs(current.settings.requestTimeoutSeconds),
         systemPrompt: `${project.systemPrompt}${preparedProjectFiles.systemContext}${pluginContext}`,
         messages: contextMessages
       })

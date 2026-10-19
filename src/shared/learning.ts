@@ -14,7 +14,6 @@ export function generationPlan(profile: ModelProfile | undefined, targetCount: n
   oneShot: boolean
   batchSize: number
   maxReferenceChars: number
-  timeoutMs: number
   maxTokens: number
 } {
   const count = Math.max(1, Math.min(40, targetCount || 10))
@@ -25,7 +24,6 @@ export function generationPlan(profile: ModelProfile | undefined, targetCount: n
       oneShot: true,
       batchSize: count,
       maxReferenceChars: 10_000,
-      timeoutMs: 90_000,
       maxTokens: Math.min(2_400, Math.max(500, 120 + count * perItem))
     }
   }
@@ -34,7 +32,6 @@ export function generationPlan(profile: ModelProfile | undefined, targetCount: n
     oneShot: false,
     batchSize: Math.min(4, count),
     maxReferenceChars: LOCAL_REFERENCE_CHARS,
-    timeoutMs: 150_000,
     maxTokens: 1_400
   }
 }

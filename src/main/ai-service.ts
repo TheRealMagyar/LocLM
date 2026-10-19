@@ -43,25 +43,25 @@ export class AiService {
     if (!request.model.modelId) throw new Error('Előbb válassz egy modellt a Beállításokban.')
     const controller = new AbortController()
     this.controllers.set(request.requestId, controller)
+    const timeoutMs = request.timeoutMs ?? (request.model.source === 'grok' ? 90_000 : 150_000)
+    let timedOut = false
+    let received = false
+    const timer = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, timeoutMs)
+    const emit = (event: ChatStreamEvent): void => {
+      if (event.type === 'chunk' || event.type === 'reasoning') received = true
+      this.emit(target, event)
+    }
 
     try {
       const messages = await this.toApiMessages(request.systemPrompt, request.messages)
-      const response = await fetch(`${normalizeBaseUrl(request.model.baseUrl)}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          ...requestHeaders(request.apiKey, extraHeaders),
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: request.model.modelId,
-          messages,
-          stream: true,
-          temperature: 0.7
-        }),
-        signal: controller.signal
-      })
-
-      if (!response.ok) throw new Error(await responseError(response, request.model.source === 'grok' ? 'A Grok modell nem válaszolt.' : 'A helyi modell nem válaszolt.'))
+      const response = await postChatCompletion(request, {
+        messages,
+        stream: true,
+        temperature: 0.7
+      }, extraHeaders, controller.signal)
       if (!response.body) throw new Error('A modell üres választ adott.')
 
       const contentType = response.headers.get('content-type') ?? ''
@@ -69,11 +69,11 @@ export class AiService {
         const payload = await response.json() as { choices?: Array<{ message?: { content?: string; reasoning_content?: string; reasoning?: string } }> }
         const message = payload.choices?.[0]?.message
         const reasoning = message?.reasoning_content ?? message?.reasoning
-        if (reasoning) this.emit(target, { requestId: request.requestId, type: 'reasoning', content: reasoning })
+        if (reasoning) emit({ requestId: request.requestId, type: 'reasoning', content: reasoning })
         const parser = new ThinkTagParser()
-        for (const part of parser.push(message?.content ?? '')) this.emit(target, { requestId: request.requestId, ...part })
-        for (const part of parser.flush()) this.emit(target, { requestId: request.requestId, ...part })
-        this.emit(target, { requestId: request.requestId, type: 'done' })
+        for (const part of parser.push(message?.content ?? '')) emit({ requestId: request.requestId, ...part })
+        for (const part of parser.flush()) emit({ requestId: request.requestId, ...part })
+        emit({ requestId: request.requestId, type: 'done' })
         return
       }
 
@@ -98,25 +98,28 @@ export class AiService {
             const payload = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string; reasoning_content?: string; reasoning?: string } }> }
             const delta = payload.choices?.[0]?.delta
             const reasoning = delta?.reasoning_content ?? delta?.reasoning
-            if (reasoning) this.emit(target, { requestId: request.requestId, type: 'reasoning', content: reasoning })
+            if (reasoning) emit({ requestId: request.requestId, type: 'reasoning', content: reasoning })
             if (delta?.content) {
-              for (const part of thinkTagParser.push(delta.content)) this.emit(target, { requestId: request.requestId, ...part })
+              for (const part of thinkTagParser.push(delta.content)) emit({ requestId: request.requestId, ...part })
             }
           } catch {
             // Ignore provider-specific keepalive chunks.
           }
         }
       }
-      for (const part of thinkTagParser.flush()) this.emit(target, { requestId: request.requestId, ...part })
-      this.emit(target, { requestId: request.requestId, type: 'done' })
+      for (const part of thinkTagParser.flush()) emit({ requestId: request.requestId, ...part })
+      emit({ requestId: request.requestId, type: 'done' })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Ismeretlen modellhiba.'
-      if (controller.signal.aborted) {
+      if (controller.signal.aborted && (!timedOut || received)) {
         this.emit(target, { requestId: request.requestId, type: 'done' })
+      } else if (timedOut) {
+        this.emit(target, { requestId: request.requestId, type: 'error', error: timeoutMessage(request.model) })
       } else {
         this.emit(target, { requestId: request.requestId, type: 'error', error: message })
       }
     } finally {
+      clearTimeout(timer)
       this.controllers.delete(request.requestId)
     }
   }
@@ -129,22 +132,12 @@ export class AiService {
     const timer = setTimeout(() => controller.abort(), timeoutMs)
     try {
       const messages = await this.toApiMessages(request.systemPrompt, request.messages)
-      const response = await fetch(`${normalizeBaseUrl(request.model.baseUrl)}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          ...requestHeaders(request.apiKey, extraHeaders),
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: request.model.modelId,
-          messages,
-          stream: true,
-          temperature: 0.3,
-          max_tokens: request.maxTokens ?? (local ? 1400 : 4000)
-        }),
-        signal: controller.signal
-      })
-      if (!response.ok) throw new Error(await responseError(response, local ? 'A helyi modell nem válaszolt.' : 'A Grok modell nem válaszolt.'))
+      const response = await postChatCompletion(request, {
+        messages,
+        stream: true,
+        temperature: 0.3,
+        max_tokens: request.maxTokens ?? (local ? 1400 : 4000)
+      }, extraHeaders, controller.signal)
       if (!response.body) throw new Error('A modell üres választ adott.')
 
       const contentType = response.headers.get('content-type') ?? ''
@@ -279,6 +272,36 @@ async function contentForMessage(text: string, attachments?: Attachment[]): Prom
   return parts
 }
 
+async function postChatCompletion(
+  request: ChatRequest,
+  fields: Record<string, unknown>,
+  extraHeaders: Record<string, string> | undefined,
+  signal: AbortSignal
+): Promise<Response> {
+  const fallback = request.model.source === 'grok' ? 'A Grok modell nem válaszolt.' : 'A helyi modell nem válaszolt.'
+  const url = `${normalizeBaseUrl(request.model.baseUrl)}/chat/completions`
+  const send = (body: Record<string, unknown>): Promise<Response> => fetch(url, {
+    method: 'POST',
+    headers: {
+      ...requestHeaders(request.apiKey, extraHeaders),
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body),
+    signal
+  })
+
+  const baseBody = { model: request.model.modelId, ...fields }
+  const markNewChat = !/\/v1$/i.test(normalizeBaseUrl(request.model.baseUrl))
+  let response = await send(markNewChat ? { ...baseBody, parent_id: null } : baseBody)
+  if (response.status === 400 && !markNewChat) {
+    const message = await responseError(response, fallback)
+    if (/startswith|NoneType|parent_id|chat_id/i.test(message)) response = await send({ ...baseBody, parent_id: null })
+    else throw new Error(message)
+  }
+  if (!response.ok) throw new Error(await responseError(response, fallback))
+  return response
+}
+
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.trim().replace(/\/+$/, '').replace('://localhost', '://127.0.0.1')
 }
@@ -331,11 +354,15 @@ function firstCompleteJsonObject(raw: string): string | undefined {
   return undefined
 }
 
+function timeoutMessage(profile: ModelProfile): string {
+  if (profile.source === 'grok') return 'A Grok nem válaszolt a megadott időkorláton belül. Növeld a válasz időkorlátot a Beállításokban, vagy próbáld újra.'
+  if (profile.source === 'codex') return 'A Codex nem válaszolt a megadott időkorláton belül. Növeld a válasz időkorlátot a Beállításokban, vagy próbáld újra.'
+  return 'A helyi modell nem válaszolt a megadott időkorláton belül. Növeld a válasz időkorlátot a Beállításokban.'
+}
+
 function completeError(error: unknown, profile: ModelProfile): Error {
   if (error instanceof Error && error.name === 'AbortError') {
-    return new Error(profile.source === 'grok'
-      ? 'A Grok nem válaszolt időben. Próbáld újra.'
-      : 'A helyi modell túl lassan válaszolt. Csökkentsd a feladatok számát, vagy válassz Grokot vagy Codexet a Tanulás oldalon.')
+    return new Error(timeoutMessage(profile))
   }
   const text = errorText(error)
   if (/fetch failed|ECONNREFUSED|ENOTFOUND|UND_ERR|Failed to parse URL|network/i.test(text)) {
@@ -360,11 +387,29 @@ function requestHeaders(apiKey?: string, extraHeaders?: Record<string, string>):
 }
 
 async function responseError(response: Response, fallback: string): Promise<string> {
+  const text = await response.text()
+  if (!text.trim()) return `${fallback} (${response.status})`
   try {
-    const payload = await response.json() as { error?: { message?: string } | string; message?: string }
-    if (typeof payload.error === 'string') return payload.error
-    return payload.error?.message ?? payload.message ?? `${fallback} (${response.status})`
+    return errorFromPayload(JSON.parse(text) as unknown, fallback, response.status)
   } catch {
-    return `${fallback} (${response.status})`
+    return text.trim().slice(0, 500)
   }
+}
+
+function errorFromPayload(payload: unknown, fallback: string, status: number): string {
+  if (!payload || typeof payload !== 'object') return `${fallback} (${status})`
+  const record = payload as { error?: { message?: unknown } | string; message?: unknown; detail?: unknown }
+  if (typeof record.error === 'string' && record.error.trim()) return record.error
+  if (record.error && typeof record.error === 'object' && typeof record.error.message === 'string' && record.error.message.trim()) return record.error.message
+  if (typeof record.message === 'string' && record.message.trim()) return record.message
+  if (typeof record.detail === 'string' && record.detail.trim()) return record.detail
+  if (Array.isArray(record.detail)) {
+    const parts = record.detail.map((item) => {
+      if (typeof item === 'string') return item
+      if (item && typeof item === 'object' && typeof (item as { msg?: unknown }).msg === 'string') return (item as { msg: string }).msg
+      return ''
+    }).filter(Boolean)
+    if (parts.length) return parts.join(' ')
+  }
+  return `${fallback} (${status})`
 }

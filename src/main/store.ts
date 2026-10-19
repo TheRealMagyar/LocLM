@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { mkdir, readFile, writeFile, copyFile, stat } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import type { Attachment, PersistedState } from '../shared/types'
+import { clampRequestTimeoutSeconds, DEFAULT_REQUEST_TIMEOUT_SECONDS, type Attachment, type PersistedState } from '../shared/types'
 import { createDefaultCodexSettings, createDefaultGrokSettings } from '../shared/model'
 
 const now = (): string => new Date().toISOString()
@@ -42,6 +42,7 @@ function createDefaultState(): PersistedState {
       language: 'en',
       theme: 'system',
       modelSource: 'local',
+      requestTimeoutSeconds: DEFAULT_REQUEST_TIMEOUT_SECONDS,
       model: {
         source: 'local',
         providerName: 'LM Studio',
@@ -111,6 +112,7 @@ export class StateStore {
             language: parsed.settings.language === 'hu' ? 'hu' : 'en',
             theme: parsed.settings.theme,
             modelSource: parsed.settings.modelSource === 'grok' || parsed.settings.modelSource === 'codex' ? parsed.settings.modelSource : 'local',
+            requestTimeoutSeconds: clampRequestTimeoutSeconds(parsed.settings.requestTimeoutSeconds),
             model: {
               source: 'local',
               ...parsed.settings.model

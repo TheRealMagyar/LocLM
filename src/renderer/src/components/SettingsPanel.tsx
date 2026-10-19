@@ -2,13 +2,16 @@ import { useEffect, useState } from 'react'
 import { Check, Cpu, Download, ExternalLink, FileText, Github, Globe2, Image, RefreshCw, ScanLine, Search, ShieldCheck, Sparkles, SquareTerminal, X } from 'lucide-react'
 import { getTranslator, type Translate } from '../i18n'
 import { activeModelProfile } from '@shared/model'
-import type {
-  AppSettings,
-  CodexConnectionStatus,
-  GrokConnectionStatus,
-  ModelDescriptor,
-  SecretSettings,
-  UpdateState
+import {
+  MAX_REQUEST_TIMEOUT_SECONDS,
+  MIN_REQUEST_TIMEOUT_SECONDS,
+  clampRequestTimeoutSeconds,
+  type AppSettings,
+  type CodexConnectionStatus,
+  type GrokConnectionStatus,
+  type ModelDescriptor,
+  type SecretSettings,
+  type UpdateState
 } from '@shared/types'
 
 interface SettingsPanelProps {
@@ -360,6 +363,21 @@ export default function SettingsPanel(props: SettingsPanelProps): React.JSX.Elem
                   ) : null}
                 </>
               )}
+              <label className="field">
+                <span>{t('requestTimeout')} <small>{t('requestTimeoutHint')}</small></span>
+                <input
+                  type="number"
+                  min={MIN_REQUEST_TIMEOUT_SECONDS}
+                  max={MAX_REQUEST_TIMEOUT_SECONDS}
+                  step={15}
+                  value={props.settings.requestTimeoutSeconds}
+                  onChange={(event) => {
+                    const value = Number(event.target.value)
+                    if (Number.isFinite(value)) updateSettings('requestTimeoutSeconds', value)
+                  }}
+                  onBlur={() => updateSettings('requestTimeoutSeconds', clampRequestTimeoutSeconds(props.settings.requestTimeoutSeconds))}
+                />
+              </label>
             </div>
           )}
 

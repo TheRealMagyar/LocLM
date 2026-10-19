@@ -15,6 +15,7 @@ import {
   scoreLocally
 } from '@shared/learning'
 import { formatProfileLabel, modelKey, resolveChatModel } from '@shared/model'
+import { requestTimeoutMs } from '@shared/types'
 import type {
   AppLanguage,
   AppSettings,
@@ -132,7 +133,7 @@ export default function LearningView(props: LearningViewProps): React.JSX.Elemen
           chatId: game.id,
           model,
           maxTokens: plan.maxTokens,
-          timeoutMs: plan.timeoutMs,
+          timeoutMs: requestTimeoutMs(props.settings.requestTimeoutSeconds),
           jsonComplete: true,
           systemPrompt: generationSystemPrompt(props.language),
           messages: [{
@@ -193,7 +194,7 @@ export default function LearningView(props: LearningViewProps): React.JSX.Elemen
             chatId: game.id,
             model,
             maxTokens: 700,
-            timeoutMs: isCloudModel(model) ? 45_000 : 40_000,
+            timeoutMs: requestTimeoutMs(props.settings.requestTimeoutSeconds),
             jsonComplete: true,
             systemPrompt: evaluationSystemPrompt(props.language),
             messages: [{
