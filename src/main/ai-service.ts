@@ -262,7 +262,7 @@ async function contentForMessage(text: string, attachments?: Attachment[]): Prom
         const bytes = await readFile(attachment.path)
         dataUrl = `data:${attachment.mimeType};base64,${bytes.toString('base64')}`
       }
-      if (dataUrl) parts.push({ type: 'image_url', image_url: { url: dataUrl } })
+      if (dataUrl) parts.push({ type: 'image_url', image_url: { url: dataUrl.length > 140_000 ? shrinkDataUrl(dataUrl, 1024, 62) : dataUrl } })
     } else if (attachment.extractedText) {
       combinedText += `\n\n--- ${attachment.name} ---\n${attachment.extractedText}`
     }
@@ -344,14 +344,14 @@ function requestBodyEnvelope(request: ChatRequest, fields: Record<string, unknow
 
 function requestBodyLimits(profile: ModelProfile): number[] {
   const remote = profile.source !== 'grok' && profile.source !== 'codex' && !/^https?:\/\/(127\.0\.0\.1|localhost)([/:?]|$)/i.test(profile.baseUrl)
-  return remote ? [900_000, 380_000, 160_000] : [8_000_000, 2_000_000]
+  return remote ? [256_000, 128_000, 64_000] : [8_000_000, 2_000_000]
 }
 
 const IMAGE_TIERS = [
-  { edge: 1280, quality: 72 },
-  { edge: 1024, quality: 60 },
-  { edge: 768, quality: 48 },
-  { edge: 512, quality: 36 }
+  { edge: 1024, quality: 62 },
+  { edge: 768, quality: 50 },
+  { edge: 512, quality: 38 },
+  { edge: 384, quality: 30 }
 ]
 
 function fitApiMessages(messages: ApiMessage[], envelope: Record<string, unknown>, limitBytes: number): ApiMessage[] {
@@ -373,7 +373,15 @@ function fitApiMessages(messages: ApiMessage[], envelope: Record<string, unknown
     omitted += 1
   }
   if (omitted) fitted = noteOmittedImages(fitted, omitted)
-  return truncateTexts(fitted, envelope, limitBytes)
+  let truncated = truncateTexts(fitted, envelope, limitBytes)
+  if (payloadBytes(envelope, truncated) <= limitBytes) return truncated
+  const system = truncated.find((message) => message.role === 'system')
+  const lastUser = [...truncated].reverse().find((message) => message.role === 'user')
+  truncated = truncateTexts([
+    ...(system ? [system] : []),
+    ...(lastUser ? [lastUser] : truncated.slice(-1))
+  ], envelope, limitBytes)
+  return truncated
 }
 
 function applyImageTier(messages: ApiMessage[], maxEdge: number, quality: number): ApiMessage[] {
@@ -464,10 +472,11 @@ function appendText(message: ApiMessage, note: string): ApiMessage {
 
 function truncateTexts(messages: ApiMessage[], envelope: Record<string, unknown>, limitBytes: number): ApiMessage[] {
   let next = messages
-  for (let attempt = 0; attempt < 12 && payloadBytes(envelope, next) > limitBytes; attempt += 1) {
+  for (let attempt = 0; attempt < 24 && payloadBytes(envelope, next) > limitBytes; attempt += 1) {
     const target = longestText(next)
-    if (!target || target.length < 800) break
-    next = replaceText(next, target, `${target.slice(0, Math.floor(target.length * 0.65))}\n\n[Text truncated to fit the model server limit.]`)
+    if (!target || target.length <= 240) break
+    const keep = Math.max(240, Math.floor(target.length * 0.6))
+    next = replaceText(next, target, `${target.slice(0, keep)}\n\n[Text truncated to fit the model server limit.]`)
   }
   return next
 }

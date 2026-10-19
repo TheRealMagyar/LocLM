@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react'
-import { ArrowUp, Camera, FileText, Globe2, Paperclip, Square, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ArrowUp, Camera, Check, Copy, FileText, Globe2, Paperclip, Square, X } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Attachment, Chat, Project } from '@shared/types'
@@ -35,15 +35,52 @@ interface ChatViewProps {
 }
 
 export default function ChatView(props: ChatViewProps): React.JSX.Element {
+  const messagesRef = useRef<HTMLElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const stickToBottomRef = useRef(true)
+  const [copiedId, setCopiedId] = useState('')
   const t = getTranslator(props.language)
+  const lastMessage = props.chat?.messages.at(-1)
+  const streaming = lastMessage?.status === 'streaming'
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [props.chat?.messages])
+    if (props.generating) stickToBottomRef.current = true
+  }, [props.generating])
+
+  useEffect(() => {
+    if (!stickToBottomRef.current) return
+    messagesEndRef.current?.scrollIntoView({ behavior: streaming ? 'auto' : 'smooth', block: 'end' })
+  }, [props.chat?.messages, streaming])
+
+  useEffect(() => {
+    if (!copiedId) return
+    const timeout = window.setTimeout(() => setCopiedId(''), 1800)
+    return () => window.clearTimeout(timeout)
+  }, [copiedId])
+
+  const handleMessagesScroll = (): void => {
+    const node = messagesRef.current
+    if (!node) return
+    stickToBottomRef.current = node.scrollHeight - node.scrollTop - node.clientHeight < 96
+  }
+
+  const copyMarkdown = async (messageId: string, content: string): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopiedId(messageId)
+    } catch {
+      setCopiedId('')
+    }
+  }
+
+  const send = (): void => {
+    stickToBottomRef.current = true
+    props.onSend()
+  }
 
   const submit = (event: React.FormEvent): void => {
     event.preventDefault()
-    props.onSend()
+    send()
   }
 
   const canSend = Boolean(props.prompt.trim() || props.attachments.length)
@@ -67,7 +104,7 @@ export default function ChatView(props: ChatViewProps): React.JSX.Element {
         </div>
       </header>
 
-      <section className="messages" aria-live="polite">
+      <section className="messages" aria-live="polite" ref={messagesRef} onScroll={handleMessagesScroll}>
         {!props.chat?.messages.length && (
           <div className="empty-chat">
             <BrandLogo className="empty-logo" size="large" />
@@ -109,12 +146,20 @@ export default function ChatView(props: ChatViewProps): React.JSX.Element {
               ) : message.status === 'streaming' ? <div className="typing-indicator"><span /><span /><span /></div> : null}
               {message.status === 'error' && <div className="message-error">{t('responseInterrupted')}</div>}
               {message.role === 'assistant' && message.modelLabel && message.status !== 'streaming' ? <div className="message-model">{message.modelLabel}</div> : null}
-              {message.role === 'assistant' && message.status === 'complete' && message.content && (
+              {message.content ? (
                 <div className="message-actions">
-                  <button type="button" onClick={() => props.onExport(props.chat?.title ?? t('loclmResponse'), message.content, 'docx')}>Word</button>
-                  <button type="button" onClick={() => props.onExport(props.chat?.title ?? t('loclmResponse'), message.content, 'pdf')}>PDF</button>
+                  <button type="button" onClick={() => void copyMarkdown(message.id, message.content)}>
+                    {copiedId === message.id ? <Check size={12} /> : <Copy size={12} />}
+                    {copiedId === message.id ? t('copied') : t('copyMarkdown')}
+                  </button>
+                  {message.role === 'assistant' && message.status === 'complete' ? (
+                    <>
+                      <button type="button" onClick={() => props.onExport(props.chat?.title ?? t('loclmResponse'), message.content, 'docx')}>Word</button>
+                      <button type="button" onClick={() => props.onExport(props.chat?.title ?? t('loclmResponse'), message.content, 'pdf')}>PDF</button>
+                    </>
+                  ) : null}
                 </div>
-              )}
+              ) : null}
             </div>
           </article>
         ))}
@@ -143,7 +188,7 @@ export default function ChatView(props: ChatViewProps): React.JSX.Element {
             onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault()
-                props.onSend()
+                send()
               }
             }}
           />

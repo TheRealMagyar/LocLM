@@ -293,9 +293,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .message-body a:hover { text-decoration: underline; }
 .message-body table { width: 100%; border-collapse: collapse; margin: 14px 0; }
 .message-body th, .message-body td { padding: 7px 9px; border-bottom: 1px solid var(--border); text-align: left; }
-.message-actions { display: flex; gap: 5px; margin-top: 10px; opacity: 0; transition: opacity .15s; }
-.message:hover .message-actions { opacity: 1; }
-.message-actions button { padding: 4px 7px; border: 0; border-radius: 6px; background: transparent; color: var(--faint); cursor: pointer; font-size: 11px; }
+.message-actions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; opacity: 0; transition: opacity .15s; }
+.message:hover .message-actions, .message:focus-within .message-actions { opacity: 1; }
+.message-actions button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border: 0; border-radius: 6px; background: transparent; color: var(--faint); cursor: pointer; font-size: 11px; }
 .message-actions button:hover { background: var(--surface-soft); color: var(--text); }
 .message-error { margin-top: 8px; color: var(--danger); font-size: 12px; }
 .assistant-insights { display: flex; flex-direction: column; gap: 8px; margin: 0 0 13px; }
