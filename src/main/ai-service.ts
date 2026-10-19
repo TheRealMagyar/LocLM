@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises'
-import type { WebContents } from 'electron'
+import { nativeImage, type WebContents } from 'electron'
 import type { Attachment, ChatMessage, ChatRequest, ChatStreamEvent, ModelDescriptor, ModelProfile } from '../shared/types'
 
 type ApiContent = string | Array<
@@ -290,16 +290,222 @@ async function postChatCompletion(
     signal
   })
 
-  const baseBody = { model: request.model.modelId, ...fields }
   const markNewChat = !/\/v1$/i.test(normalizeBaseUrl(request.model.baseUrl))
-  let response = await send(markNewChat ? { ...baseBody, parent_id: null } : baseBody)
-  if (response.status === 400 && !markNewChat) {
+  const originalMessages = (fields.messages as ApiMessage[] | undefined) ?? []
+  const limits = requestBodyLimits(request.model)
+  let withParent = markNewChat
+  let limitIndex = 0
+  let messages = fitApiMessages(originalMessages, requestBodyEnvelope(request, fields, withParent), limits[0])
+  let response = await send(requestBody(request, fields, messages, withParent))
+
+  while (!response.ok && limitIndex < limits.length) {
     const message = await responseError(response, fallback)
-    if (/startswith|NoneType|parent_id|chat_id/i.test(message)) response = await send({ ...baseBody, parent_id: null })
-    else throw new Error(message)
+    const needsParent = response.status === 400 && !withParent && /startswith|NoneType|parent_id|chat_id/i.test(message)
+    if (needsParent) {
+      withParent = true
+      messages = fitApiMessages(originalMessages, requestBodyEnvelope(request, fields, withParent), limits[limitIndex])
+      response = await send(requestBody(request, fields, messages, withParent))
+      continue
+    }
+    if (isPayloadTooLarge(message, response.status) && limitIndex < limits.length - 1) {
+      limitIndex += 1
+      messages = fitApiMessages(originalMessages, requestBodyEnvelope(request, fields, withParent), limits[limitIndex])
+      response = await send(requestBody(request, fields, messages, withParent))
+      continue
+    }
+    throw new Error(sanitizeProviderMessage(message, response.status))
   }
-  if (!response.ok) throw new Error(await responseError(response, fallback))
   return response
+}
+
+function requestBody(
+  request: ChatRequest,
+  fields: Record<string, unknown>,
+  messages: ApiMessage[],
+  withParent: boolean
+): Record<string, unknown> {
+  return {
+    model: request.model.modelId,
+    ...fields,
+    messages,
+    ...(withParent ? { parent_id: null } : {})
+  }
+}
+
+function requestBodyEnvelope(request: ChatRequest, fields: Record<string, unknown>, withParent: boolean): Record<string, unknown> {
+  const rest: Record<string, unknown> = { ...fields }
+  delete rest.messages
+  return {
+    model: request.model.modelId,
+    ...rest,
+    ...(withParent ? { parent_id: null } : {})
+  }
+}
+
+function requestBodyLimits(profile: ModelProfile): number[] {
+  const remote = profile.source !== 'grok' && profile.source !== 'codex' && !/^https?:\/\/(127\.0\.0\.1|localhost)([/:?]|$)/i.test(profile.baseUrl)
+  return remote ? [900_000, 380_000, 160_000] : [8_000_000, 2_000_000]
+}
+
+const IMAGE_TIERS = [
+  { edge: 1280, quality: 72 },
+  { edge: 1024, quality: 60 },
+  { edge: 768, quality: 48 },
+  { edge: 512, quality: 36 }
+]
+
+function fitApiMessages(messages: ApiMessage[], envelope: Record<string, unknown>, limitBytes: number): ApiMessage[] {
+  const slots = listImageSlots(messages)
+  let fitted = messages
+  if (slots.some((slot) => imageUrl(messages, slot).length > 180_000)) {
+    fitted = applyImageTier(messages, IMAGE_TIERS[0].edge, IMAGE_TIERS[0].quality)
+  }
+  for (const tier of IMAGE_TIERS) {
+    if (payloadBytes(envelope, fitted) <= limitBytes) return fitted
+    fitted = applyImageTier(messages, tier.edge, tier.quality)
+  }
+
+  let omitted = 0
+  while (payloadBytes(envelope, fitted) > limitBytes) {
+    const remaining = listImageSlots(fitted)
+    if (!remaining.length) break
+    fitted = removeImageSlot(fitted, remaining[0])
+    omitted += 1
+  }
+  if (omitted) fitted = noteOmittedImages(fitted, omitted)
+  return truncateTexts(fitted, envelope, limitBytes)
+}
+
+function applyImageTier(messages: ApiMessage[], maxEdge: number, quality: number): ApiMessage[] {
+  return messages.map((message) => {
+    if (!Array.isArray(message.content)) return message
+    return {
+      ...message,
+      content: message.content.map((part) => part.type === 'image_url'
+        ? { ...part, image_url: { url: shrinkDataUrl(part.image_url.url, maxEdge, quality) } }
+        : part)
+    }
+  })
+}
+
+function shrinkDataUrl(dataUrl: string, maxEdge: number, quality: number): string {
+  if (!dataUrl.startsWith('data:image/')) return dataUrl
+  const image = nativeImage.createFromDataURL(dataUrl)
+  if (image.isEmpty()) return dataUrl
+  const { width, height } = image.getSize()
+  if (!width || !height) return dataUrl
+  const scale = Math.min(1, maxEdge / Math.max(width, height))
+  const resized = scale < 1
+    ? image.resize({
+      width: Math.max(1, Math.round(width * scale)),
+      height: Math.max(1, Math.round(height * scale)),
+      quality: 'good'
+    })
+    : image
+  const next = `data:image/jpeg;base64,${resized.toJPEG(quality).toString('base64')}`
+  return next.length < dataUrl.length ? next : dataUrl
+}
+
+function listImageSlots(messages: ApiMessage[]): Array<{ messageIndex: number; partIndex: number }> {
+  const slots: Array<{ messageIndex: number; partIndex: number }> = []
+  messages.forEach((message, messageIndex) => {
+    if (!Array.isArray(message.content)) return
+    message.content.forEach((part, partIndex) => {
+      if (part.type === 'image_url') slots.push({ messageIndex, partIndex })
+    })
+  })
+  return slots
+}
+
+function imageUrl(messages: ApiMessage[], slot: { messageIndex: number; partIndex: number }): string {
+  const content = messages[slot.messageIndex]?.content
+  if (!Array.isArray(content)) return ''
+  const part = content[slot.partIndex]
+  return part?.type === 'image_url' ? part.image_url.url : ''
+}
+
+function removeImageSlot(messages: ApiMessage[], slot: { messageIndex: number; partIndex: number }): ApiMessage[] {
+  return messages.map((message, messageIndex) => {
+    if (messageIndex !== slot.messageIndex || !Array.isArray(message.content)) return message
+    return { ...message, content: message.content.filter((_, partIndex) => partIndex !== slot.partIndex) }
+  })
+}
+
+function noteOmittedImages(messages: ApiMessage[], count: number): ApiMessage[] {
+  const note = `\n\n[${count} image${count === 1 ? '' : 's'} omitted because the model server rejected the request size.]`
+  let index = -1
+  for (let cursor = messages.length - 1; cursor >= 0; cursor -= 1) {
+    if (messages[cursor]?.role === 'user') {
+      index = cursor
+      break
+    }
+  }
+  if (index < 0) return messages
+  return messages.map((message, messageIndex) => messageIndex === index ? appendText(message, note) : message)
+}
+
+function appendText(message: ApiMessage, note: string): ApiMessage {
+  if (typeof message.content === 'string') return { ...message, content: `${message.content}${note}` }
+  let textIndex = -1
+  for (let cursor = message.content.length - 1; cursor >= 0; cursor -= 1) {
+    if (message.content[cursor]?.type === 'text') {
+      textIndex = cursor
+      break
+    }
+  }
+  if (textIndex < 0) return { ...message, content: [...message.content, { type: 'text', text: note.trim() }] }
+  return {
+    ...message,
+    content: message.content.map((part, index) => index === textIndex && part.type === 'text'
+      ? { ...part, text: `${part.text}${note}` }
+      : part)
+  }
+}
+
+function truncateTexts(messages: ApiMessage[], envelope: Record<string, unknown>, limitBytes: number): ApiMessage[] {
+  let next = messages
+  for (let attempt = 0; attempt < 12 && payloadBytes(envelope, next) > limitBytes; attempt += 1) {
+    const target = longestText(next)
+    if (!target || target.length < 800) break
+    next = replaceText(next, target, `${target.slice(0, Math.floor(target.length * 0.65))}\n\n[Text truncated to fit the model server limit.]`)
+  }
+  return next
+}
+
+function longestText(messages: ApiMessage[]): string | undefined {
+  let longest = ''
+  for (const message of messages) {
+    if (typeof message.content === 'string' && message.content.length > longest.length) longest = message.content
+    if (!Array.isArray(message.content)) continue
+    for (const part of message.content) {
+      if (part.type === 'text' && part.text.length > longest.length) longest = part.text
+    }
+  }
+  return longest || undefined
+}
+
+function replaceText(messages: ApiMessage[], current: string, replacement: string): ApiMessage[] {
+  let replaced = false
+  return messages.map((message) => {
+    if (replaced) return message
+    if (typeof message.content === 'string' && message.content === current) {
+      replaced = true
+      return { ...message, content: replacement }
+    }
+    if (!Array.isArray(message.content)) return message
+    return {
+      ...message,
+      content: message.content.map((part) => {
+        if (replaced || part.type !== 'text' || part.text !== current) return part
+        replaced = true
+        return { ...part, text: replacement }
+      })
+    }
+  })
+}
+
+function payloadBytes(envelope: Record<string, unknown>, messages: ApiMessage[]): number {
+  return Buffer.byteLength(JSON.stringify({ ...envelope, messages }), 'utf8')
 }
 
 function normalizeBaseUrl(baseUrl: string): string {
@@ -392,8 +598,24 @@ async function responseError(response: Response, fallback: string): Promise<stri
   try {
     return errorFromPayload(JSON.parse(text) as unknown, fallback, response.status)
   } catch {
-    return text.trim().slice(0, 500)
+    return sanitizeProviderMessage(text.trim(), response.status)
   }
+}
+
+function isPayloadTooLarge(message: string, status = 0): boolean {
+  return status === 413 || /413|request entity too large|payload too large|body too large/i.test(message)
+}
+
+function sanitizeProviderMessage(message: string, status: number): string {
+  if (isPayloadTooLarge(message, status)) {
+    return 'A kérés túl nagy volt a modell szerverének. A nagy képek és fájlok nem fértek bele a méretkorlátba.'
+  }
+  if (/<html[\s>]/i.test(message)) {
+    const title = message.match(/<title>([^<]+)<\/title>/i)?.[1]?.replace(/\s+/g, ' ').trim()
+    if (title) return `A modell szervere hibát adott: ${title}`
+    return message.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 280)
+  }
+  return message.length > 500 ? `${message.slice(0, 500)}…` : message
 }
 
 function errorFromPayload(payload: unknown, fallback: string, status: number): string {
