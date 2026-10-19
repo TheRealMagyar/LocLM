@@ -448,7 +448,10 @@ function localizedUpdateMessage(state: UpdateState, t: Translate): string {
   if (state.status === 'available') return t('updateAvailable', { version: state.version ?? '' })
   if (state.status === 'downloading') return t('updateDownloading')
   if (state.status === 'downloaded') return t('updateDownloaded')
-  if (state.status === 'error') return t('updateError')
+  if (state.status === 'error') return state.message ? `${t('updateError')} ${state.message}` : t('updateError')
+  if (state.detail === 'development') return t('updateDevDisabled')
+  if (state.detail === 'no-feed') return t('updateNoFeed')
+  if (state.detail === 'current') return t('noUpdateAvailableVersion', { version: state.version ?? '' })
   return state.version ? t('noUpdateAvailable') : t('updateNotChecked')
 }
 

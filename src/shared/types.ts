@@ -276,4 +276,5 @@ export interface UpdateState {
   version?: string
   percent?: number
   message?: string
+  detail?: 'development' | 'no-feed' | 'current'
 }

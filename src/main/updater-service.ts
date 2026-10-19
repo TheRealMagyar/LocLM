@@ -20,7 +20,7 @@ export class UpdaterService {
 
     autoUpdater.on('checking-for-update', () => this.emit({ status: 'checking', message: 'Frissítések keresése…' }))
     autoUpdater.on('update-available', (info) => this.emit({ status: 'available', version: info.version, message: `A(z) ${info.version} verzió elérhető.` }))
-    autoUpdater.on('update-not-available', (info) => this.emit({ status: 'idle', version: info.version, message: 'A legfrissebb verzió van telepítve.' }))
+    autoUpdater.on('update-not-available', (info) => this.emit({ status: 'idle', version: info.version, detail: 'current' }))
     autoUpdater.on('download-progress', (progress) => this.emit({ status: 'downloading', percent: progress.percent, message: 'Frissítés letöltése…' }))
     autoUpdater.on('update-downloaded', (info) => this.emit({ status: 'downloaded', version: info.version, message: 'A frissítés telepítésre kész.' }))
     autoUpdater.on('error', (error) => this.emit({ status: 'error', message: error.message }))
@@ -42,12 +42,12 @@ export class UpdaterService {
 
   async check(): Promise<UpdateState> {
     if (!app.isPackaged) {
-      const state: UpdateState = { status: 'idle', version: app.getVersion(), message: 'Fejlesztői módban a frissítésellenőrzés ki van kapcsolva.' }
+      const state: UpdateState = { status: 'idle', version: app.getVersion(), detail: 'development' }
       this.emit(state)
       return state
     }
     if (!this.hasUpdateFeed()) {
-      const state: UpdateState = { status: 'idle', version: app.getVersion(), message: 'Ehhez a helyi buildhez még nincs GitHub Releases frissítési csatorna.' }
+      const state: UpdateState = { status: 'idle', version: app.getVersion(), detail: 'no-feed' }
       this.emit(state)
       return state
     }
